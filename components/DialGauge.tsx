@@ -37,10 +37,13 @@ export default function DialGauge({
   // Convert degrees to radians for SVG arc math
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 
+  // Round helper to avoid server/client floating-point drift (hydration mismatch fix)
+  const round = (n: number) => Number(n.toFixed(3));
+
   // Get point on arc at given angle
   const pointOnArc = (angleDeg: number) => ({
-    x: cx + radius * Math.cos(toRad(angleDeg)),
-    y: cy + radius * Math.sin(toRad(angleDeg)),
+    x: round(cx + radius * Math.cos(toRad(angleDeg))),
+    y: round(cy + radius * Math.sin(toRad(angleDeg))),
   });
 
   // Build SVG arc path
@@ -55,8 +58,8 @@ export default function DialGauge({
   // Needle endpoint
   const needleLength = radius - 10;
   const needleTip = {
-    x: cx + needleLength * Math.cos(toRad(valueAngle)),
-    y: cy + needleLength * Math.sin(toRad(valueAngle)),
+    x: round(cx + needleLength * Math.cos(toRad(valueAngle))),
+    y: round(cy + needleLength * Math.sin(toRad(valueAngle))),
   };
 
   // Tick marks at 0%, 25%, 50%, 75%, 100%
@@ -97,8 +100,8 @@ export default function DialGauge({
           const outer = pointOnArc(angle);
           const innerRadius = radius - 12;
           const inner = {
-            x: cx + innerRadius * Math.cos(toRad(angle)),
-            y: cy + innerRadius * Math.sin(toRad(angle)),
+             x: round(cx + innerRadius * Math.cos(toRad(angle))),
+            y: round(cy + innerRadius * Math.sin(toRad(angle))),
           };
           return (
             <line
