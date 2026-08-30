@@ -10,8 +10,24 @@ function statusColor(hours: number) {
   return "#34D399"; // nominal
 }
 
-export default function WhatIfSimulator() {
+interface WhatIfSimulatorProps {
+  /**
+   * Optional callback so a parent (e.g. page.tsx) can mirror the slider
+   * value and drive other components, like SimulationChart, from it.
+   * Component still works fully standalone if this isn't passed.
+   */
+  onSeverityChange?: (severity: number) => void;
+}
+
+export default function WhatIfSimulator({
+  onSeverityChange,
+}: WhatIfSimulatorProps) {
   const [severity, setSeverity] = useState(30);
+
+  const handleChange = (value: number) => {
+    setSeverity(value);
+    onSeverityChange?.(value);
+  };
 
   // Baseline: at 0% storm severity, battery drains at a nominal rate
   // giving ~48hrs remaining. Higher severity increases draw multiplier,
@@ -57,7 +73,7 @@ export default function WhatIfSimulator() {
           max={100}
           step={1}
           value={severity}
-          onChange={(e) => setSeverity(Number(e.target.value))}
+          onChange={(e) => handleChange(Number(e.target.value))}
           className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-border accent-[#4CC9F0]"
         />
 
