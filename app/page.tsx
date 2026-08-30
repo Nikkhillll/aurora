@@ -2,14 +2,30 @@
 
 import { useState, useEffect } from "react";
 
+import dynamic from "next/dynamic";
+
 import EnvironmentCard from "@/components/EnvironmentCard";
 import EnergyCard from "@/components/EnergyCard";
 import InfrastructureCard from "@/components/InfrastructureCard";
 import LogisticsCard from "@/components/LogisticsCard";
-import TempTrendChart from "@/components/Charts/TempTrendChart";
-import BatteryTrendChart from "@/components/Charts/BatteryTrendChart";
 import AlertsPanel from "@/components/AlertsPanel";
 import WhatIfSimulator from "@/components/WhatIfSimulator";
+
+// Recharts' ResponsiveContainer measures the real DOM on mount, which
+// differs slightly from the server's guess and causes a hydration
+// mismatch. Rendering these client-only avoids that entirely.
+const TempTrendChart = dynamic(
+  () => import("@/components/Charts/TempTrendChart"),
+  { ssr: false }
+);
+const BatteryTrendChart = dynamic(
+  () => import("@/components/Charts/BatteryTrendChart"),
+  { ssr: false }
+);
+const SimulationChart = dynamic(
+  () => import("@/components/Charts/SimulationChart"),
+  { ssr: false }
+);
 
 import {
   stations,
@@ -177,6 +193,7 @@ function deriveStatus(stationId: string): StatusSegment[] {
 export default function Home() {
   const [activeStation, setActiveStation] = useState("maitri");
   const [utcTime, setUtcTime] = useState("");
+  const [severity, setSeverity] = useState(30);
 
   // Live UTC clock
   useEffect(() => {
@@ -195,6 +212,7 @@ export default function Home() {
   const { env, energy, infra, logistics, stationAlerts } =
     useStationData(activeStation);
   const statusSegments = deriveStatus(activeStation);
+  const stationKey = activeStation === "bharati" ? "bharati" : "maitri";
 
   return (
     <div className="flex-1 flex flex-col">
@@ -256,8 +274,8 @@ export default function Home() {
             Trend history
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <TempTrendChart />
-            <BatteryTrendChart />
+            <TempTrendChart station={stationKey} />
+            <BatteryTrendChart station={stationKey} />
           </div>
         </section>
 
@@ -268,7 +286,10 @@ export default function Home() {
           </h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <AlertsPanel alerts={stationAlerts} />
-            <WhatIfSimulator />
+            <WhatIfSimulator onSeverityChange={setSeverity} />
+          </div>
+          <div className="mt-4">
+            <SimulationChart severity={severity} station={stationKey} />
           </div>
         </section>
       </main>
