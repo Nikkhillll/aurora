@@ -18,7 +18,7 @@ Ministry of Earth Sciences (MoES) · National Centre for Polar and Ocean Researc
 
 <br/>
 
-**[Live Demo](#)** · **[Problem Statement](#-problem-statement)** · **[Getting Started](#-getting-started)** · **[Team](#-team)**
+**[Live Demo](#)** · **[Problem Statement](#problem-statement)** · **[Getting Started](#getting-started)** · **[Team](#team)**
 
 </div>
 
