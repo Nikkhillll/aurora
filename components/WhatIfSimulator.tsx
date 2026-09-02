@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Sliders, Battery } from "lucide-react";
-import { energyData } from "@/data/mockData";
-
-function statusColor(hours: number) {
-  if (hours <= 12) return "#F5484F"; // critical
-  if (hours <= 24) return "#F5A524"; // warning
-  return "#34D399"; // nominal
-}
+import { useEffect, useState } from "react";
+import { Sliders, Battery, Wifi, WifiOff } from "lucide-react";
+import { energyData, bharatiEnergyData } from "@/data/mockData";
+import {
+  runSimulation,
+  statusColorForHours,
+  type StationKey,
+  type SimulationResult,
+} from "@/lib/simulationClient";
 
 interface WhatIfSimulatorProps {
   /**
@@ -17,39 +17,76 @@ interface WhatIfSimulatorProps {
    * Component still works fully standalone if this isn't passed.
    */
   onSeverityChange?: (severity: number) => void;
+  station?: StationKey;
 }
 
 export default function WhatIfSimulator({
   onSeverityChange,
+  station = "maitri",
 }: WhatIfSimulatorProps) {
   const [severity, setSeverity] = useState(30);
+  const [result, setResult] = useState<SimulationResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const stationEnergy = station === "bharati" ? bharatiEnergyData : energyData;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    runSimulation({
+      severity,
+      station,
+      batteryLevel: stationEnergy.batteryLevel,
+    }).then((res) => {
+      if (!cancelled) {
+        setResult(res);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [severity, station, stationEnergy.batteryLevel]);
 
   const handleChange = (value: number) => {
     setSeverity(value);
     onSeverityChange?.(value);
   };
 
-  // Baseline: at 0% storm severity, battery drains at a nominal rate
-  // giving ~48hrs remaining. Higher severity increases draw multiplier,
-  // reducing hours remaining non-linearly.
-  const baselineHours = 48;
-  const multiplier = 1 + (severity / 100) * 1.8; // 1x -> 2.8x at 100%
-  const batteryFactor = energyData.batteryLevel / 61; // scale off current level
-  const projectedHours = Math.max(
-    1,
-    Math.round((baselineHours * batteryFactor) / multiplier)
-  );
-
-  const color = statusColor(projectedHours);
+  const projectedHours = result?.projectedHours ?? 0;
+  const color = statusColorForHours(projectedHours);
 
   return (
-    <div className="rounded-[12px] border border-border bg-bg-card p-5 flex flex-col gap-5">
+    <div className="rounded-xl border border-border bg-bg-card p-5 flex flex-col gap-5">
       {/* Card header */}
-      <div className="flex items-center gap-2">
-        <Sliders size={18} className="text-text-muted" />
-        <h2 className="text-base text-text-muted font-sans">
-          What-if simulator
-        </h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sliders size={18} className="text-text-muted" />
+          <h2 className="text-base text-text-muted font-sans">
+            What-if simulator
+          </h2>
+        </div>
+
+        {/* Live/fallback indicator — shows whether this is hitting the
+            real backend yet, or still running on local math. Useful for
+            the team to see at a glance during integration, harmless to
+            leave visible in the final demo too. */}
+        {result && (
+          <span
+            className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-wide"
+            style={{ color: result.isLive ? "#34D399" : "#8592A3" }}
+            title={
+              result.isLive
+                ? "Connected to live simulation backend"
+                : "Backend not connected yet — using local projection"
+            }
+          >
+            {result.isLive ? <Wifi size={11} /> : <WifiOff size={11} />}
+            {result.isLive ? "Live" : "Offline mode"}
+          </span>
+        )}
       </div>
 
       {/* Scenario label */}
@@ -86,10 +123,11 @@ export default function WhatIfSimulator({
 
       {/* Projected impact */}
       <div
-        className="flex items-center gap-3 rounded-[8px] p-3"
+        className="flex items-center gap-3 rounded-lg p-3 transition-opacity"
         style={{
           backgroundColor: `${color}0F`,
           border: `1px solid ${color}30`,
+          opacity: loading ? 0.6 : 1,
         }}
       >
         <Battery size={20} style={{ color }} />
