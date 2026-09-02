@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import {
   LineChart,
   Line,
@@ -13,17 +13,13 @@ import {
 } from "recharts";
 import { TrendingDown } from "lucide-react";
 import { energyData, bharatiEnergyData, stations } from "@/data/mockData";
-
-function statusColor(hours: number) {
-  if (hours <= 12) return "#F5484F"; // critical
-  if (hours <= 24) return "#F5A524"; // warning
-  return "#34D399"; // nominal
-}
+import { runSimulation, statusColorForHours } from "@/lib/simulationClient";
 
 interface SimulationChartProps {
   /**
-   * Storm severity 0-100, matching WhatIfSimulator's slider. Same formula
-   * as WhatIfSimulator so the chart and its "hrs remaining" readout agree.
+   * Storm severity 0-100, matching WhatIfSimulator's slider. Both
+   * components now pull their projection from the same simulationClient,
+   * so they can no longer disagree with each other.
    */
   severity?: number;
   station?: "maitri" | "bharati";
@@ -37,42 +33,54 @@ export default function SimulationChart({
   const stationName =
     stations.find((s) => s.id === station)?.name ?? "Maitri";
 
-  const { data, projectedHours, color } = useMemo(() => {
-    const baselineHours = 48;
-    const multiplier = 1 + (severity / 100) * 1.8; // 1x -> 2.8x at 100%
-    // NOTE: divisor of 61 is carried over from WhatIfSimulator's own
-    // formula (Maitri's current batteryLevel) — keep in sync with that
-    // file if it changes.
-    const batteryFactor = stationEnergy.batteryLevel / 61;
-    const nominalHours = Math.max(1, baselineHours * batteryFactor);
-    const projected = Math.max(1, Math.round(nominalHours / multiplier));
+  const [projectedHours, setProjectedHours] = useState(24);
+  const [isLive, setIsLive] = useState(false);
 
-    const spanHours = Math.max(nominalHours, projected);
-    const step = spanHours / 8;
-    const points = Array.from({ length: 9 }, (_, i) => {
-      const hour = Math.round(i * step);
-      return {
-        hour,
-        baselineBattery: Math.max(
-          0,
-          Math.round(stationEnergy.batteryLevel * (1 - hour / nominalHours))
-        ),
-        projectedBattery: Math.max(
-          0,
-          Math.round(stationEnergy.batteryLevel * (1 - hour / projected))
-        ),
-      };
+  useEffect(() => {
+    let cancelled = false;
+
+    runSimulation({
+      severity,
+      station,
+      batteryLevel: stationEnergy.batteryLevel,
+    }).then((res) => {
+      if (!cancelled) {
+        setProjectedHours(res.projectedHours);
+        setIsLive(res.isLive);
+      }
     });
 
-    return {
-      data: points,
-      projectedHours: projected,
-      color: statusColor(projected),
+    return () => {
+      cancelled = true;
     };
-  }, [severity, stationEnergy]);
+  }, [severity, station, stationEnergy.batteryLevel]);
+
+  const color = statusColorForHours(projectedHours);
+
+  // Baseline (0% severity) is only used to draw the comparison line on
+  // the chart — it doesn't need to hit the backend, since it's a fixed
+  // reference point rather than the interactive projection.
+  const baselineHours = Math.max(1, 48 * (stationEnergy.batteryLevel / 61));
+
+  const spanHours = Math.max(baselineHours, projectedHours);
+  const step = spanHours / 8;
+  const data = Array.from({ length: 9 }, (_, i) => {
+    const hour = Math.round(i * step);
+    return {
+      hour,
+      baselineBattery: Math.max(
+        0,
+        Math.round(stationEnergy.batteryLevel * (1 - hour / baselineHours))
+      ),
+      projectedBattery: Math.max(
+        0,
+        Math.round(stationEnergy.batteryLevel * (1 - hour / projectedHours))
+      ),
+    };
+  });
 
   return (
-    <div className="rounded-[12px] border border-border bg-bg-card p-5 flex flex-col gap-4">
+    <div className="rounded-xl border border-border bg-bg-card p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <TrendingDown size={18} className="text-text-muted" />
@@ -82,6 +90,7 @@ export default function SimulationChart({
         </div>
         <span className="text-sm font-mono" style={{ color }}>
           {projectedHours}h remaining · {stationName}
+          {isLive && <span className="text-status-nominal ml-1">·live</span>}
         </span>
       </div>
 
