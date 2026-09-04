@@ -228,6 +228,96 @@ class BatterySensor(_DriftingSensor):
 
 
 # ---------------------------------------------------------------------------
+# Demo Event Sensor Models (Person 3 Demo Modes)
+# ---------------------------------------------------------------------------
+
+class StormWindSensor(WindSensor):
+    """
+    Storm wind model: sustained gale-force winds (95-125 km/h)
+    with frequent severe gusts (up to 150 km/h).
+    Safe within validator range [0.0, 300.0] km/h.
+    """
+
+    def __init__(self, baseline: float = 102.0) -> None:
+        super().__init__(baseline=baseline)
+        self.value = baseline
+        self.low = 70.0
+        self.high = 160.0
+        self.drift_rate = 1.4
+        self.noise_scale = 2.2
+        self.mean_revert_strength = 0.03
+        self.baseline = baseline
+
+    def step(self) -> float:
+        # 30% chance of severe katabatic gust spike (+12-25 km/h)
+        if random.random() < 0.30:
+            self.value += random.uniform(12, 25)
+        return super().step()
+
+
+class StormPressureSensor(PressureSensor):
+    """
+    Storm barometric pressure model: deep cyclonic depression (940-952 hPa).
+    Safe within validator range [800.0, 1150.0] hPa.
+    """
+
+    def __init__(self, baseline: float = 946.0) -> None:
+        super().__init__(baseline=baseline)
+        self.value = baseline
+        self.low = 920.0
+        self.high = 960.0
+        self.drift_rate = 0.25
+        self.noise_scale = 0.30
+        self.mean_revert_strength = 0.02
+        self.baseline = baseline
+
+
+class StormTemperatureSensor(TemperatureSensor):
+    """
+    Storm temperature model: severe blizzard cold and thermal drop.
+    Safe within validator range [-100.0, 50.0] °C.
+    """
+
+    def __init__(self, baseline: float = -42.0) -> None:
+        super().__init__(baseline=baseline)
+        self.value = baseline
+        self.low = -60.0
+        self.high = -20.0
+        self.drift_rate = 0.30
+        self.noise_scale = 0.40
+        self.mean_revert_strength = 0.02
+        self.baseline = baseline
+
+
+class RapidDrainBatterySensor(_DriftingSensor):
+    """
+    Rapid battery drain simulation event.
+
+    Simulates emergency generator failure or high heating load,
+    dropping ~2.5% to 4.0% per tick down to reserve levels.
+    Safe within validator range [0.0, 100.0] %.
+    """
+
+    def __init__(self, initial: float = 72.0, drain_rate: float = 3.2) -> None:
+        super().__init__(
+            initial=initial,
+            low=5.0,
+            high=100.0,
+            drift_rate=0.1,
+            noise_scale=0.1,
+            mean_revert_strength=0.0,
+            baseline=5.0,
+        )
+        self.drain_rate = drain_rate
+
+    def step(self) -> float:
+        # Rapid progressive discharge each tick
+        drain = self.drain_rate + random.uniform(-0.3, 0.4)
+        self.value = max(self.low, self.value - drain)
+        return round(self.value, 2)
+
+
+# ---------------------------------------------------------------------------
 # Station configuration
 # ---------------------------------------------------------------------------
 
@@ -373,14 +463,29 @@ class StationSimulator:
         station_id: str,
         mqtt_publisher: Optional[MQTTPublisher] = None,
         mqtt_topic: Optional[str] = None,
+        event: str = "none",
     ) -> None:
         self.station_id = station_id
+        self.event = (event or "none").lower().strip()
         profile = STATION_PROFILES.get(station_id, STATION_PROFILES["maitri"])
 
-        self.temperature = TemperatureSensor(baseline=profile["temperature"])
-        self.wind = WindSensor(baseline=profile["wind"])
-        self.pressure = PressureSensor(baseline=profile["pressure"])
-        self.battery = BatterySensor(baseline=profile["battery"])
+        if self.event == "storm":
+            # Storm event: sustained gale winds (95-125+ km/h), deep barometric drop, and thermal chill
+            self.temperature = StormTemperatureSensor(baseline=profile["temperature"] - 6.0)
+            self.wind = StormWindSensor(baseline=profile["wind"] + 58.0)
+            self.pressure = StormPressureSensor(baseline=profile["pressure"] - 22.0)
+            self.battery = BatterySensor(baseline=profile["battery"])
+        elif self.event in ("battery-drain", "batterydrain", "drain"):
+            # Rapid battery drain: steady accelerated discharge tick-by-tick
+            self.temperature = TemperatureSensor(baseline=profile["temperature"])
+            self.wind = WindSensor(baseline=profile["wind"])
+            self.pressure = PressureSensor(baseline=profile["pressure"])
+            self.battery = RapidDrainBatterySensor(initial=profile["battery"])
+        else:
+            self.temperature = TemperatureSensor(baseline=profile["temperature"])
+            self.wind = WindSensor(baseline=profile["wind"])
+            self.pressure = PressureSensor(baseline=profile["pressure"])
+            self.battery = BatterySensor(baseline=profile["battery"])
 
         self._reading_count = 0
         self.mqtt_publisher = mqtt_publisher
@@ -402,9 +507,15 @@ class StationSimulator:
         """
         Emit a telemetry reading.
 
-        1. Prints structured JSON to stdout.
-        2. Publishes JSON to the configured MQTT topic if broker is connected.
+        1. Prints active event banner if enabled.
+        2. Prints structured JSON to stdout.
+        3. Publishes JSON to the configured MQTT topic if broker is connected.
         """
+        if self.event == "storm":
+            print(f"[DEMO EVENT: STORM SPIKE] Wind: {reading.wind} km/h | Pressure: {reading.pressure} hPa | Temp: {reading.temperature} °C")
+        elif self.event in ("battery-drain", "batterydrain", "drain"):
+            print(f"[DEMO EVENT: RAPID BATTERY DRAIN] Battery Level: {reading.battery}% (rapid discharge active)")
+
         print(reading.to_json_pretty())
 
         if self.mqtt_publisher and self.mqtt_publisher.is_connected:
@@ -453,6 +564,13 @@ def main() -> None:
         help="Seconds between readings (default: 3.0)",
     )
     parser.add_argument(
+        "--event",
+        type=str,
+        default="none",
+        choices=["none", "storm", "battery-drain"],
+        help="Trigger demo event: 'storm' (gale wind spike & pressure drop) or 'battery-drain' (rapid battery discharge)",
+    )
+    parser.add_argument(
         "--mqtt-host",
         type=str,
         default=DEFAULT_MQTT_HOST,
@@ -492,12 +610,20 @@ def main() -> None:
         station_id=args.station,
         mqtt_publisher=mqtt_pub,
         mqtt_topic=args.mqtt_topic,
+        event=args.event,
     )
+
+    event_label = "NOMINAL (None)"
+    if args.event == "storm":
+        event_label = "STORM SPIKE [ACTIVE]"
+    elif args.event in ("battery-drain", "batterydrain", "drain"):
+        event_label = "RAPID BATTERY DRAIN [ACTIVE]"
 
     print(f"{'=' * 60}")
     print(f"  AURORA Sensor Simulator")
     print(f"  Station   : {args.station}")
     print(f"  Interval  : {args.interval}s")
+    print(f"  Event Mode: {event_label}")
     print(f"  MQTT Topic: {sim.mqtt_topic}")
     print(f"  MQTT State: {'Connected' if (mqtt_pub and mqtt_pub.is_connected) else 'Disabled / Offline'}")
     print(f"  Press Ctrl+C to stop")

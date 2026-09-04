@@ -24,10 +24,20 @@ Stop with **Ctrl+C** — the simulator shuts down cleanly and reports total read
 |---|---|---|
 | `--station` | `maitri` | Station ID (`maitri` or `bharati`) |
 | `--interval` | `3.0` | Seconds between readings |
+| `--event` | `none` | Demo anomaly mode: `none`, `storm`, or `battery-drain` |
+| `--mqtt-host` | `localhost` | MQTT broker host |
+| `--mqtt-port` | `1883` | MQTT broker port |
+| `--no-mqtt` | `false` | Run in console-only mode |
 
 ```bash
-# Bharati station, 5-second intervals
+# Nominal simulation (Bharati station, 5-second intervals)
 python sensor_simulator.py --station bharati --interval 5
+
+# Demo Event 1: Storm spike (gale winds 100+ km/h, barometric drop)
+python sensor_simulator.py --station maitri --event storm
+
+# Demo Event 2: Rapid battery drain (severe generator / solar discharge)
+python sensor_simulator.py --station bharati --event battery-drain
 ```
 
 ---
