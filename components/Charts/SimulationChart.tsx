@@ -13,27 +13,29 @@ import {
 } from "recharts";
 import { TrendingDown } from "lucide-react";
 import { energyData, bharatiEnergyData, stations } from "@/data/mockData";
-import { runSimulation, statusColorForHours } from "@/lib/simulationClient";
+import {
+  runSimulation,
+  statusColorForRisk,
+  type Scenario,
+} from "@/lib/simulationClient";
 
 interface SimulationChartProps {
-  /**
-   * Storm severity 0-100, matching WhatIfSimulator's slider. Both
-   * components now pull their projection from the same simulationClient,
-   * so they can no longer disagree with each other.
-   */
   severity?: number;
+  scenario?: Scenario;
   station?: "maitri" | "bharati";
 }
 
 export default function SimulationChart({
   severity = 30,
+  scenario = "storm",
   station = "maitri",
 }: SimulationChartProps) {
   const stationEnergy = station === "bharati" ? bharatiEnergyData : energyData;
-  const stationName =
-    stations.find((s) => s.id === station)?.name ?? "Maitri";
+  const stationName = stations.find((s) => s.id === station)?.name ?? "Maitri";
 
   const [projectedHours, setProjectedHours] = useState(24);
+  const [timeline, setTimeline] = useState<{ hour: number; battery_pct: number }[]>([]);
+  const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("low");
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
@@ -41,11 +43,14 @@ export default function SimulationChart({
 
     runSimulation({
       severity,
+      scenario,
       station,
       batteryLevel: stationEnergy.batteryLevel,
     }).then((res) => {
       if (!cancelled) {
         setProjectedHours(res.projectedHours);
+        setTimeline(res.timeline);
+        setRiskLevel(res.riskLevel);
         setIsLive(res.isLive);
       }
     });
@@ -53,31 +58,17 @@ export default function SimulationChart({
     return () => {
       cancelled = true;
     };
-  }, [severity, station, stationEnergy.batteryLevel]);
+  }, [severity, scenario, station, stationEnergy.batteryLevel]);
 
-  const color = statusColorForHours(projectedHours);
+  const color = statusColorForRisk(riskLevel);
 
-  // Baseline (0% severity) is only used to draw the comparison line on
-  // the chart — it doesn't need to hit the backend, since it's a fixed
-  // reference point rather than the interactive projection.
-  const baselineHours = Math.max(1, 48 * (stationEnergy.batteryLevel / 61));
-
-  const spanHours = Math.max(baselineHours, projectedHours);
-  const step = spanHours / 8;
-  const data = Array.from({ length: 9 }, (_, i) => {
-    const hour = Math.round(i * step);
-    return {
-      hour,
-      baselineBattery: Math.max(
-        0,
-        Math.round(stationEnergy.batteryLevel * (1 - hour / baselineHours))
-      ),
-      projectedBattery: Math.max(
-        0,
-        Math.round(stationEnergy.batteryLevel * (1 - hour / projectedHours))
-      ),
-    };
-  });
+  // Timeline now comes straight from the backend (or the local fallback,
+  // which produces the same shape) — no more separately-calculated
+  // baseline/projected lines drifting out of sync with the slider.
+  const data = timeline.map((point) => ({
+    hour: point.hour,
+    battery: point.battery_pct,
+  }));
 
   return (
     <div className="rounded-xl border border-border bg-bg-card p-5 flex flex-col gap-4">
@@ -125,18 +116,9 @@ export default function SimulationChart({
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line
               type="monotone"
-              dataKey="baselineBattery"
-              name="Baseline"
-              stroke="#64748b"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="projectedBattery"
-              name={`Projected (${severity}% severity)`}
-              stroke="#4CC9F0"
+              dataKey="battery"
+              name={`Projected battery (${scenario}, ${severity}%)`}
+              stroke={color}
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4, fill: color }}

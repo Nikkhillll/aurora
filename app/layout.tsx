@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
+
+
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
@@ -13,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AURORA — Antarctic operations",
+  title: "AURORA . Antarctic operations",
   description:
     "Antarctic Unified Operations & Risk Analytics — Digital twin dashboard for remote monitoring of Indian Antarctic research stations",
 };
@@ -24,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans antialiased">{children}</body>
     </html>
   );
 }
