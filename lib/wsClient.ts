@@ -2,6 +2,10 @@
  * Real-time WebSocket Client for AURORA.
  * Connects to /ws/live with station filtering and JWT token authentication.
  * Manages heartbeat ping/pong, automatic reconnection, and typed event dispatching.
+ *
+ * HYBRID & RESILIENT:
+ * Handles HTTPS/WSS conversions, avoids aggressive reconnect loops on static deployments,
+ * and maintains demo stability when backend is unreachable.
  */
 
 import { getToken } from "./authClient";
@@ -65,22 +69,29 @@ class AuroraWebSocketClient {
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
+  private maxReconnectAttempts = 3;
   private shouldReconnect = true;
 
-  constructor() {
-    // Client initialized lazily
-  }
-
   public connect(stationId: string | null = null): void {
+    if (typeof window === "undefined") return;
+
     this.stationId = stationId;
     this.shouldReconnect = true;
 
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+    if (
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    const wsUrl = this.buildWebSocketUrl();
+    if (!wsUrl) {
+      this.setStatus("disconnected");
       return;
     }
 
     this.setStatus("connecting");
-    const wsUrl = this.buildWebSocketUrl();
 
     try {
       this.socket = new WebSocket(wsUrl);
@@ -96,24 +107,31 @@ class AuroraWebSocketClient {
           const data = JSON.parse(event.data);
           this.handleIncomingMessage(data);
         } catch {
-          // Ignore invalid JSON
+          // Ignore non-JSON
         }
       };
 
       this.socket.onclose = () => {
         this.stopHeartbeat();
-        this.setStatus(this.shouldReconnect ? "reconnecting" : "disconnected");
-        if (this.shouldReconnect) {
+        if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.setStatus("reconnecting");
           this.scheduleReconnect();
+        } else {
+          this.setStatus("disconnected");
         }
       };
 
       this.socket.onerror = () => {
-        this.socket?.close();
+        // Quietly close socket on error
+        try {
+          this.socket?.close();
+        } catch {}
       };
     } catch {
       this.setStatus("disconnected");
-      this.scheduleReconnect();
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        this.scheduleReconnect();
+      }
     }
   }
 
@@ -125,7 +143,9 @@ class AuroraWebSocketClient {
       this.reconnectTimeout = null;
     }
     if (this.socket) {
-      this.socket.close();
+      try {
+        this.socket.close();
+      } catch {}
       this.socket = null;
     }
     this.setStatus("disconnected");
@@ -134,7 +154,6 @@ class AuroraWebSocketClient {
   public setStation(stationId: string | null): void {
     if (this.stationId !== stationId) {
       this.stationId = stationId;
-      // Reconnect with new station filter query
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
         this.disconnect();
         this.connect(stationId);
@@ -162,9 +181,19 @@ class AuroraWebSocketClient {
     return this.status;
   }
 
-  private buildWebSocketUrl(): string {
-    const rawApi = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const wsBase = rawApi.replace(/^http/, "ws");
+  private buildWebSocketUrl(): string | null {
+    if (typeof window === "undefined") return null;
+
+    // If on HTTPS and no custom API URL is set, avoid insecure ws:// connection
+    const isHttps = window.location.protocol === "https:";
+    const defaultBase = isHttps ? "" : "http://localhost:8000";
+    const rawApi = process.env.NEXT_PUBLIC_API_URL || defaultBase;
+
+    if (!rawApi) {
+      return null;
+    }
+
+    const wsBase = rawApi.replace(/^http(s)?/, (_, s) => (s ? "wss" : "ws"));
     const params = new URLSearchParams();
 
     if (this.stationId) {
@@ -200,9 +229,7 @@ class AuroraWebSocketClient {
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
         try {
           this.socket.send(JSON.stringify({ type: "ping" }));
-        } catch {
-          // Ignore
-        }
+        } catch {}
       }
     }, 20000);
   }
@@ -218,8 +245,7 @@ class AuroraWebSocketClient {
     if (!this.shouldReconnect || this.reconnectTimeout) return;
 
     this.reconnectAttempts += 1;
-    // Exponential backoff: 1s, 2s, 4s, max 10s
-    const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 10000);
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
