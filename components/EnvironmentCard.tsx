@@ -45,40 +45,35 @@ export default function EnvironmentCard({ data }: EnvironmentCardProps) {
         />
       </div>
 
-      {/* Numeric readouts */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* Wind speed */}
-        <div className="flex items-center gap-2">
-          <Wind size={16} className="text-accent-env" />
-          <div>
-            <p className="text-sm text-text-muted font-sans">Wind speed</p>
-            <p className="text-xl font-mono text-accent-env">
-              {data.wind}
-              <span className="text-sm text-text-muted ml-1">km/h</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Weather risk */}
+            {/* Wind speed — own row, mirrors Solar/Wind row in Energy */}
+      <div className="flex items-center gap-2">
+        <Wind size={16} className="text-accent-env" />
         <div>
-          <p className="text-sm text-text-muted font-sans mb-1">
-            Weather risk
+          <p className="text-sm text-text-muted font-sans">Wind speed</p>
+          <p className="text-xl font-mono text-accent-env">
+            {data.wind}
+            <span className="text-sm text-text-muted ml-1">km/h</span>
           </p>
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-mono font-medium"
-            style={{
-              color: riskColor[data.weatherRisk],
-              backgroundColor: `${riskColor[data.weatherRisk]}14`,
-              border: `1px solid ${riskColor[data.weatherRisk]}30`,
-            }}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: riskColor[data.weatherRisk] }}
-            />
-            {data.weatherRisk}
-          </span>
         </div>
+      </div>
+      {/* Weather risk — full width row, mirrors Generator row in Energy */}
+      <div className="pt-1 border-border">
+        <p className="text-sm text-text-muted font-sans mb-1">Weather risk</p>
+        <span
+        
+          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-mono font-medium"
+          style={{
+            color: riskColor[data.weatherRisk],
+            backgroundColor: `${riskColor[data.weatherRisk]}14`,
+            border: `1px solid ${riskColor[data.weatherRisk]}30`,
+          }}
+        >
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ backgroundColor: riskColor[data.weatherRisk] }}
+          />
+          {data.weatherRisk}
+        </span>
       </div>
     </div>
   );
