@@ -15,6 +15,7 @@ import Notifications from "@/components/Notifications";
 import AdminConsole from "@/components/AdminConsole";
 import { exportSnapshotToCSV, exportSnapshotToPrintableReport } from "@/utils/export";
 import { getStoredUser, setStoredUser, login, clearSession, type User } from "@/lib/authClient";
+import { generateAlerts } from "@/lib/alertsClient";
 import { Download, Printer, Shield, LogIn, LogOut, User as UserIcon, X, AlertCircle } from "lucide-react";
 
 // PERSON 1: live Infrastructure/Logistics snapshot fetch — added on top of
@@ -59,6 +60,7 @@ import {
   bharatiAlerts,
   type EnvironmentData,
   type EnergyData,
+  type Alert,
 } from "@/data/mockData";
 
 // ── Contour line SVG pattern (topographic background) ──
@@ -225,8 +227,9 @@ export default function Home() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // PERSON 1: live Infrastructure/Logistics snapshot state
+  // Live backend snapshot + alert state
   const [snapshot, setSnapshot] = useState<StationSnapshot | null>(null);
+  const [liveAlerts, setLiveAlerts] = useState<Alert[]>([]);
 
   // Initialize auth on client mount to prevent React hydration mismatch (Error #418)
   useEffect(() => {
@@ -265,22 +268,50 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // Live station snapshot polling.
+  // Live station snapshot + ML alert polling.
   // Fetch immediately and then refresh every 5 seconds so the dashboard
-  // reflects new telemetry without requiring a page refresh.
+  // reflects new telemetry and backend-generated alerts without a refresh.
   useEffect(() => {
     let cancelled = false;
 
-    const loadSnapshot = async () => {
+    const loadLiveData = async () => {
       const snap = await fetchStationSnapshot(activeStation as StationKey);
+
+      if (cancelled) return;
+
+      setSnapshot(snap);
+
+      const conditions = snap
+        ? {
+            station: activeStation as StationKey,
+            batteryLevel: snap.energy.battery_level_pct,
+            windSpeed: snap.environment.wind_speed_ms * 3.6,
+            temperature: snap.environment.temperature_c,
+          }
+        : {
+            station: activeStation as StationKey,
+            batteryLevel: activeStation === "bharati"
+              ? bharatiEnergyData.batteryLevel
+              : energyData.batteryLevel,
+            windSpeed: activeStation === "bharati"
+              ? bharatiEnvironmentData.wind
+              : environmentData.wind,
+            temperature: activeStation === "bharati"
+              ? bharatiEnvironmentData.temperature
+              : environmentData.temperature,
+          };
+
+      const result = await generateAlerts(conditions);
+
       if (!cancelled) {
-        setSnapshot(snap);
+        setLiveAlerts(result.alerts);
       }
     };
 
-    void loadSnapshot();
+    void loadLiveData();
+
     const interval = setInterval(() => {
-      void loadSnapshot();
+      void loadLiveData();
     }, 5000);
 
     return () => {
@@ -305,7 +336,7 @@ export default function Home() {
     energy: mockEnergy,
     infra: mockInfra,
     logistics: mockLogistics,
-    stationAlerts,
+    stationAlerts: mockStationAlerts,
   } = useStationData(activeStation);
 
   // Use the complete backend snapshot for Environment and Energy when it is
@@ -656,7 +687,7 @@ export default function Home() {
             Alerts & simulation
           </h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <AlertsPanel alerts={stationAlerts} />
+            <AlertsPanel alerts={snapshot ? liveAlerts : mockStationAlerts} />
             <WhatIfSimulator
               onSeverityChange={setSeverity}
               onScenarioChange={setScenario}

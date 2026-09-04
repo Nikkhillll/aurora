@@ -32,7 +32,7 @@ export interface LogisticsData {
 
 export interface Alert {
   id: string;
-  severity: "low" | "medium" | "high";
+  severity: "low" | "medium" | "high" | "critical";
   message: string;
 }
 

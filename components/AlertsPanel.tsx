@@ -1,9 +1,19 @@
 "use client";
 
-import { AlertTriangle, AlertCircle, Info } from "lucide-react";
+import {
+  AlertTriangle,
+  AlertCircle,
+  Info,
+  ShieldAlert,
+} from "lucide-react";
 import type { Alert } from "@/data/mockData";
 
 const severityConfig = {
+  critical: {
+    color: "#F5484F",
+    icon: ShieldAlert,
+    label: "Critical",
+  },
   high: {
     color: "#F5484F",
     icon: AlertTriangle,
@@ -34,6 +44,7 @@ export default function AlertsPanel({ alerts }: AlertsPanelProps) {
           <AlertTriangle size={18} className="text-text-muted" />
           <h2 className="text-base text-text-muted font-sans">Alerts</h2>
         </div>
+
         <span className="text-xs font-mono text-text-muted">
           {alerts.length} active
         </span>
@@ -64,6 +75,7 @@ export default function AlertsPanel({ alerts }: AlertsPanelProps) {
                   className="mt-0.5 shrink-0"
                   style={{ color: config.color }}
                 />
+
                 <div className="flex flex-col gap-1 min-w-0">
                   <span
                     className="text-[11px] font-mono font-medium uppercase tracking-wide w-fit"
@@ -71,6 +83,7 @@ export default function AlertsPanel({ alerts }: AlertsPanelProps) {
                   >
                     {config.label}
                   </span>
+
                   <p className="text-sm text-text-primary font-sans leading-snug">
                     {alert.message}
                   </p>
