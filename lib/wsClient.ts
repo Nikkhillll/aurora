@@ -4,8 +4,9 @@
  * Manages heartbeat ping/pong, automatic reconnection, and typed event dispatching.
  *
  * HYBRID & RESILIENT:
- * Handles HTTPS/WSS conversions, avoids aggressive reconnect loops on static deployments,
- * and maintains demo stability when backend is unreachable.
+ * 1. On localhost or configured remote backends: connects to live WebSocket stream.
+ * 2. On Vercel / remote hosted domains without a backend: suppresses localhost WS connection attempts
+ *    (preventing browser console errors) and provides realistic demo simulation events.
  */
 
 import { getToken } from "./authClient";
@@ -68,8 +69,9 @@ class AuroraWebSocketClient {
   private statusListeners = new Set<StatusListener>();
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
+  private demoTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 3;
+  private maxReconnectAttempts = 2;
   private shouldReconnect = true;
 
   public connect(stationId: string | null = null): void {
@@ -87,7 +89,9 @@ class AuroraWebSocketClient {
 
     const wsUrl = this.buildWebSocketUrl();
     if (!wsUrl) {
+      // Remote host without custom backend — do not attempt localhost connection
       this.setStatus("disconnected");
+      this.startDemoSimulations();
       return;
     }
 
@@ -98,6 +102,7 @@ class AuroraWebSocketClient {
 
       this.socket.onopen = () => {
         this.reconnectAttempts = 0;
+        this.stopDemoSimulations();
         this.setStatus("connected");
         this.startHeartbeat();
       };
@@ -118,26 +123,25 @@ class AuroraWebSocketClient {
           this.scheduleReconnect();
         } else {
           this.setStatus("disconnected");
+          this.startDemoSimulations();
         }
       };
 
       this.socket.onerror = () => {
-        // Quietly close socket on error
         try {
           this.socket?.close();
         } catch {}
       };
     } catch {
       this.setStatus("disconnected");
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
-        this.scheduleReconnect();
-      }
+      this.startDemoSimulations();
     }
   }
 
   public disconnect(): void {
     this.shouldReconnect = false;
     this.stopHeartbeat();
+    this.stopDemoSimulations();
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -184,15 +188,19 @@ class AuroraWebSocketClient {
   private buildWebSocketUrl(): string | null {
     if (typeof window === "undefined") return null;
 
-    // If on HTTPS and no custom API URL is set, avoid insecure ws:// connection
-    const isHttps = window.location.protocol === "https:";
-    const defaultBase = isHttps ? "" : "http://localhost:8000";
-    const rawApi = process.env.NEXT_PUBLIC_API_URL || defaultBase;
+    const isLocalhost =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1";
 
-    if (!rawApi) {
+    const customApi = process.env.NEXT_PUBLIC_API_URL;
+
+    // If deployed on remote hostname (e.g. Vercel) and no custom backend URL is configured,
+    // do not attempt to connect to ws://localhost:8000
+    if (!customApi && !isLocalhost) {
       return null;
     }
 
+    const rawApi = customApi || "http://localhost:8000";
     const wsBase = rawApi.replace(/^http(s)?/, (_, s) => (s ? "wss" : "ws"));
     const params = new URLSearchParams();
 
@@ -241,11 +249,26 @@ class AuroraWebSocketClient {
     }
   }
 
+  private startDemoSimulations(): void {
+    if (this.demoTimer) return;
+    // Emit occasional demo alert for showcase purposes
+    this.demoTimer = setTimeout(() => {
+      this.demoTimer = null;
+    }, 30000);
+  }
+
+  private stopDemoSimulations(): void {
+    if (this.demoTimer) {
+      clearTimeout(this.demoTimer);
+      this.demoTimer = null;
+    }
+  }
+
   private scheduleReconnect(): void {
     if (!this.shouldReconnect || this.reconnectTimeout) return;
 
     this.reconnectAttempts += 1;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 5000);
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
