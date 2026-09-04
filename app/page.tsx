@@ -20,11 +20,13 @@ import { Download, Printer, Shield, LogIn, LogOut, User as UserIcon, X, AlertCir
 // PERSON 1: live Infrastructure/Logistics snapshot fetch — added on top of
 // Person 6's auth/admin/export work without touching any of it.
 import {
-  fetchSnapshot,
-  mapInfrastructure,
-  mapLogistics,
+  fetchStationSnapshot,
   type StationKey,
   type StationSnapshot,
+} from "@/lib/stationClient";
+import {
+  mapInfrastructure,
+  mapLogistics,
 } from "@/lib/snapshotClient";
 
 // Recharts' ResponsiveContainer measures the real DOM on mount, which
@@ -55,6 +57,8 @@ import {
   bharatiInfrastructureData,
   bharatiLogisticsData,
   bharatiAlerts,
+  type EnvironmentData,
+  type EnergyData,
 } from "@/data/mockData";
 
 // ── Contour line SVG pattern (topographic background) ──
@@ -261,19 +265,27 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // PERSON 1: fetch live snapshot whenever activeStation changes. The
-  // synchronous "clear stale snapshot" reset lives in the click handler
-  // below (handleStationChange), not here — eslint's
-  // react-hooks/set-state-in-effect rule flags setState called synchronously
-  // in an effect body; setState inside the .then() below is fine since that
-  // runs after the async fetch resolves, not synchronously in the effect.
+  // Live station snapshot polling.
+  // Fetch immediately and then refresh every 5 seconds so the dashboard
+  // reflects new telemetry without requiring a page refresh.
   useEffect(() => {
     let cancelled = false;
-    fetchSnapshot(activeStation as StationKey).then((snap) => {
-      if (!cancelled) setSnapshot(snap);
-    });
+
+    const loadSnapshot = async () => {
+      const snap = await fetchStationSnapshot(activeStation as StationKey);
+      if (!cancelled) {
+        setSnapshot(snap);
+      }
+    };
+
+    void loadSnapshot();
+    const interval = setInterval(() => {
+      void loadSnapshot();
+    }, 5000);
+
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [activeStation]);
 
@@ -287,16 +299,91 @@ export default function Home() {
   };
 
   const station = stations.find((s) => s.id === activeStation) ?? stations[0];
-  const { env, energy, infra: mockInfra, logistics: mockLogistics, stationAlerts } =
-    useStationData(activeStation);
 
-  // PERSON 1: live snapshot when available, mock fallback otherwise.
-  // Everything downstream (cards, export handlers) keeps using the plain
-  // `infra` / `logistics` names, so nothing else in this file needs to change.
+  const {
+    env: mockEnv,
+    energy: mockEnergy,
+    infra: mockInfra,
+    logistics: mockLogistics,
+    stationAlerts,
+  } = useStationData(activeStation);
+
+  // Use the complete backend snapshot for Environment and Energy when it is
+  // available. Keep mock data as a graceful fallback if the API is offline.
+  const env: EnvironmentData = snapshot
+    ? {
+        temperature: snapshot.environment.temperature_c,
+        // Backend reports wind in m/s; the existing card expects km/h.
+        wind: snapshot.environment.wind_speed_ms * 3.6,
+        pressure: snapshot.environment.pressure_hpa,
+        weatherRisk:
+          snapshot.environment.status === "critical"
+            ? "High"
+            : snapshot.environment.status === "warning"
+              ? "Moderate"
+              : "Low",
+      }
+    : mockEnv;
+
+  const energy: EnergyData = snapshot
+    ? {
+        solarGeneration: snapshot.energy.generation_kw,
+        windGeneration: 0,
+        batteryLevel: snapshot.energy.battery_level_pct,
+        generatorStatus:
+          snapshot.energy.status === "critical"
+            ? "Offline"
+            : snapshot.energy.status === "warning"
+              ? "Standby"
+              : "Online",
+      }
+    : mockEnergy;
+
   const infra = snapshot ? mapInfrastructure(snapshot) : mockInfra;
   const logistics = snapshot ? mapLogistics(snapshot) : mockLogistics;
 
-  const statusSegments = deriveStatus(activeStation);
+  const statusSegments: StatusSegment[] = [
+    {
+      label: "env",
+      status: snapshot
+        ? snapshot.environment.status
+        : env.weatherRisk === "High"
+          ? "critical"
+          : env.weatherRisk === "Moderate"
+            ? "warning"
+            : "nominal",
+    },
+    {
+      label: "power",
+      status: snapshot
+        ? snapshot.energy.status
+        : energy.batteryLevel < 30
+          ? "critical"
+          : energy.batteryLevel < 50
+            ? "warning"
+            : "nominal",
+    },
+    {
+      label: "struct",
+      status: snapshot
+        ? snapshot.infrastructure.status
+        : infra.zoneStatus === "Critical"
+          ? "critical"
+          : infra.zoneStatus === "Warning"
+            ? "warning"
+            : "nominal",
+    },
+    {
+      label: "logistics",
+      status: snapshot
+        ? snapshot.logistics.status
+        : logistics.fuelLevel < 30
+          ? "critical"
+          : logistics.fuelLevel < 50
+            ? "warning"
+            : "nominal",
+    },
+  ];
   const stationKey = activeStation === "bharati" ? "bharati" : "maitri";
 
   const handleExportCSV = () => {
@@ -308,28 +395,36 @@ export default function Home() {
           temperature_c: env.temperature,
           wind_speed_ms: env.wind,
           pressure_hpa: env.pressure,
-          visibility_km: 10,
-          status: env.weatherRisk.toLowerCase(),
+          visibility_km: snapshot ? snapshot.environment.visibility_km : 10,
+          status: snapshot
+            ? snapshot.environment.status
+            : env.weatherRisk.toLowerCase(),
         },
         energy: {
           battery_level_pct: energy.batteryLevel,
-          generation_kw: energy.solarGeneration + energy.windGeneration,
-          consumption_kw: 12,
-          projected_hours_remaining: 24,
-          status: "nominal",
+          generation_kw: snapshot
+            ? snapshot.energy.generation_kw
+            : energy.solarGeneration + energy.windGeneration,
+          consumption_kw: snapshot ? snapshot.energy.consumption_kw : 12,
+          projected_hours_remaining: snapshot
+            ? snapshot.energy.projected_hours_remaining
+            : 24,
+          status: snapshot ? snapshot.energy.status : "nominal",
         },
         infrastructure: {
           equipment_health_pct: infra.equipmentHealth,
           building_condition: infra.buildingCondition,
           zones: [],
-          status: infra.zoneStatus.toLowerCase(),
+          status: snapshot
+            ? snapshot.infrastructure.status
+            : infra.zoneStatus.toLowerCase(),
         },
         logistics: {
           fuel_level_pct: logistics.fuelLevel,
           supplies_level_pct: logistics.foodSupplies,
           spare_parts_count: logistics.spareParts,
           next_resupply: logistics.resupplyWindow,
-          status: "nominal",
+          status: snapshot ? snapshot.logistics.status : "nominal",
         },
       },
       station.name
@@ -345,28 +440,36 @@ export default function Home() {
           temperature_c: env.temperature,
           wind_speed_ms: env.wind,
           pressure_hpa: env.pressure,
-          visibility_km: 10,
-          status: env.weatherRisk.toLowerCase(),
+          visibility_km: snapshot ? snapshot.environment.visibility_km : 10,
+          status: snapshot
+            ? snapshot.environment.status
+            : env.weatherRisk.toLowerCase(),
         },
         energy: {
           battery_level_pct: energy.batteryLevel,
-          generation_kw: energy.solarGeneration + energy.windGeneration,
-          consumption_kw: 12,
-          projected_hours_remaining: 24,
-          status: "nominal",
+          generation_kw: snapshot
+            ? snapshot.energy.generation_kw
+            : energy.solarGeneration + energy.windGeneration,
+          consumption_kw: snapshot ? snapshot.energy.consumption_kw : 12,
+          projected_hours_remaining: snapshot
+            ? snapshot.energy.projected_hours_remaining
+            : 24,
+          status: snapshot ? snapshot.energy.status : "nominal",
         },
         infrastructure: {
           equipment_health_pct: infra.equipmentHealth,
           building_condition: infra.buildingCondition,
           zones: [],
-          status: infra.zoneStatus.toLowerCase(),
+          status: snapshot
+            ? snapshot.infrastructure.status
+            : infra.zoneStatus.toLowerCase(),
         },
         logistics: {
           fuel_level_pct: logistics.fuelLevel,
           supplies_level_pct: logistics.foodSupplies,
           spare_parts_count: logistics.spareParts,
           next_resupply: logistics.resupplyWindow,
-          status: "nominal",
+          status: snapshot ? snapshot.logistics.status : "nominal",
         },
       },
       station.name
@@ -502,9 +605,14 @@ export default function Home() {
               </button>
             )}
 
-            {/* UTC Clock */}
+            {/* UTC Clock + live API state */}
             <div className="text-right ml-1">
               <p className="font-mono text-xs text-text-muted">{utcTime}</p>
+              <p className={`font-mono text-[10px] uppercase tracking-wider ${
+                snapshot ? "text-[#34D399]" : "text-text-muted"
+              }`}>
+                {snapshot ? "● LIVE" : "○ FALLBACK"}
+              </p>
             </div>
           </div>
         </div>
