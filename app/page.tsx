@@ -11,6 +11,12 @@ import LogisticsCard from "@/components/LogisticsCard";
 import AlertsPanel from "@/components/AlertsPanel";
 import WhatIfSimulator from "@/components/WhatIfSimulator";
 
+import Notifications from "@/components/Notifications";
+import AdminConsole from "@/components/AdminConsole";
+import { exportSnapshotToCSV, exportSnapshotToPrintableReport } from "@/utils/export";
+import { getStoredUser, setStoredUser, login, clearSession, type User } from "@/lib/authClient";
+import { Download, Printer, Shield, LogIn, LogOut, User as UserIcon, X, AlertCircle } from "lucide-react";
+
 // Recharts' ResponsiveContainer measures the real DOM on mount, which
 // differs slightly from the server's guess and causes a hydration
 // mismatch. Rendering these client-only avoids that entirely.
@@ -194,6 +200,36 @@ export default function Home() {
   const [activeStation, setActiveStation] = useState("maitri");
   const [utcTime, setUtcTime] = useState("");
   const [severity, setSeverity] = useState(30);
+  const [scenario, setScenario] = useState<"storm" | "equipment_failure" | "resupply_delay">("storm");
+
+  // Auth & Admin State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("admin@aurora.ncpor.res.in");
+  const [loginPassword, setLoginPassword] = useState("Admin@Aurora2026!");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // Initialize auth on client mount to prevent React hydration mismatch (Error #418)
+  useEffect(() => {
+    const stored = getStoredUser();
+    if (stored) {
+      setCurrentUser(stored);
+    } else {
+      const defaultAdmin: User = {
+        id: "usr_001",
+        email: "admin@aurora.ncpor.res.in",
+        name: "NCPOR Station Director",
+        role: "admin",
+        is_active: true,
+        created_at: new Date().toISOString(),
+        last_login: new Date().toISOString(),
+      };
+      setStoredUser(defaultAdmin);
+      setCurrentUser(defaultAdmin);
+    }
+  }, []);
 
   // Live UTC clock
   useEffect(() => {
@@ -214,13 +250,118 @@ export default function Home() {
   const statusSegments = deriveStatus(activeStation);
   const stationKey = activeStation === "bharati" ? "bharati" : "maitri";
 
+  const handleExportCSV = () => {
+    exportSnapshotToCSV(
+      {
+        station_id: activeStation,
+        timestamp: new Date().toISOString(),
+        environment: {
+          temperature_c: env.temperature,
+          wind_speed_ms: env.wind,
+          pressure_hpa: env.pressure,
+          visibility_km: 10,
+          status: env.weatherRisk.toLowerCase(),
+        },
+        energy: {
+          battery_level_pct: energy.batteryLevel,
+          generation_kw: energy.solarGeneration + energy.windGeneration,
+          consumption_kw: 12,
+          projected_hours_remaining: 24,
+          status: "nominal",
+        },
+        infrastructure: {
+          equipment_health_pct: infra.equipmentHealth,
+          building_condition: infra.buildingCondition,
+          zones: [],
+          status: infra.zoneStatus.toLowerCase(),
+        },
+        logistics: {
+          fuel_level_pct: logistics.fuelLevel,
+          supplies_level_pct: logistics.foodSupplies,
+          spare_parts_count: logistics.spareParts,
+          next_resupply: logistics.resupplyWindow,
+          status: "nominal",
+        },
+      },
+      station.name
+    );
+  };
+
+  const handleExportPDF = () => {
+    exportSnapshotToPrintableReport(
+      {
+        station_id: activeStation,
+        timestamp: new Date().toISOString(),
+        environment: {
+          temperature_c: env.temperature,
+          wind_speed_ms: env.wind,
+          pressure_hpa: env.pressure,
+          visibility_km: 10,
+          status: env.weatherRisk.toLowerCase(),
+        },
+        energy: {
+          battery_level_pct: energy.batteryLevel,
+          generation_kw: energy.solarGeneration + energy.windGeneration,
+          consumption_kw: 12,
+          projected_hours_remaining: 24,
+          status: "nominal",
+        },
+        infrastructure: {
+          equipment_health_pct: infra.equipmentHealth,
+          building_condition: infra.buildingCondition,
+          zones: [],
+          status: infra.zoneStatus.toLowerCase(),
+        },
+        logistics: {
+          fuel_level_pct: logistics.fuelLevel,
+          supplies_level_pct: logistics.foodSupplies,
+          spare_parts_count: logistics.spareParts,
+          next_resupply: logistics.resupplyWindow,
+          status: "nominal",
+        },
+      },
+      station.name
+    );
+  };
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    setLoginLoading(true);
+    try {
+      const res = await login(loginEmail, loginPassword);
+      setCurrentUser(res.user);
+      setShowLoginModal(false);
+    } catch (err: unknown) {
+      setLoginError(err instanceof Error ? err.message : "Login failed.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    setCurrentUser(null);
+    setShowAdmin(false);
+  };
+
+  const quickDemoLogin = (role: "admin" | "operator") => {
+    if (role === "admin") {
+      setLoginEmail("admin@aurora.ncpor.res.in");
+      setLoginPassword("Admin@Aurora2026!");
+    } else {
+      setLoginEmail("operator@aurora.ncpor.res.in");
+      setLoginPassword("Operator@Aurora2026!");
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col">
       {/* ── Header with contour texture ── */}
       <header className="relative overflow-hidden border-b border-border px-4 py-4 sm:px-6">
         <ContourPattern />
 
-        <div className="relative z-10 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Left: station identity */}
           <div className="flex flex-col gap-1">
             <span className="text-xs text-text-muted font-sans uppercase tracking-widest">
@@ -232,7 +373,7 @@ export default function Home() {
                 <button
                   key={s.id}
                   onClick={() => setActiveStation(s.id)}
-                  className={`font-mono text-base px-2.5 py-1 rounded transition-colors ${
+                  className={`font-mono text-base px-2.5 py-1 rounded transition-colors cursor-pointer ${
                     activeStation === s.id
                       ? "text-text-primary bg-border/50"
                       : "text-text-muted hover:text-text-primary"
@@ -247,12 +388,85 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Right: UTC timestamp */}
-          <div className="text-right">
-            <p className="font-mono text-base text-text-muted">{utcTime}</p>
+          {/* Right: Controls & UTC timestamp */}
+          <div className="flex flex-wrap items-center gap-2.5 sm:justify-end">
+            {/* Snapshot Export Buttons */}
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded border border-border bg-bg-card hover:bg-border/50 text-text-primary transition-colors cursor-pointer"
+              title="Export CSV Telemetry Snapshot"
+            >
+              <Download size={13} />
+              CSV
+            </button>
+
+            <button
+              onClick={handleExportPDF}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded border border-border bg-bg-card hover:bg-border/50 text-text-primary transition-colors cursor-pointer"
+              title="Generate Printable Status Report (PDF)"
+            >
+              <Printer size={13} />
+              PDF
+            </button>
+
+            {/* Live Real-Time Notifications Tray */}
+            <Notifications stationId={activeStation} />
+
+            {/* Admin Console Toggle (if Admin user) */}
+            {currentUser?.role === "admin" && (
+              <button
+                onClick={() => setShowAdmin(!showAdmin)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded border transition-colors cursor-pointer ${
+                  showAdmin
+                    ? "border-[#4CC9F0] bg-[#4CC9F0]/20 text-[#4CC9F0] font-semibold"
+                    : "border-[#4CC9F0]/40 bg-[#4CC9F0]/10 text-[#4CC9F0] hover:bg-[#4CC9F0]/20"
+                }`}
+              >
+                <Shield size={13} />
+                Admin
+              </button>
+            )}
+
+            {/* User Account / Login Toggle */}
+            {currentUser ? (
+              <div className="flex items-center gap-1.5 bg-border/30 border border-border px-2 py-1 rounded text-xs font-mono">
+                <span className="text-[#34D399] font-bold">●</span>
+                <span className="text-text-primary">{currentUser.name.split(" ")[0]}</span>
+                <span className="text-text-muted uppercase text-[10px] bg-border/50 px-1 rounded">
+                  {currentUser.role}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  title="Log out"
+                  className="ml-1 text-text-muted hover:text-[#F5484F] transition-colors"
+                >
+                  <LogOut size={12} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded border border-border bg-bg-card hover:bg-border/50 text-text-primary transition-colors cursor-pointer"
+              >
+                <LogIn size={13} />
+                Sign In
+              </button>
+            )}
+
+            {/* UTC Clock */}
+            <div className="text-right ml-1">
+              <p className="font-mono text-xs text-text-muted">{utcTime}</p>
+            </div>
           </div>
         </div>
       </header>
+
+      {/* ── Admin Console Drawer / Modal Section ── */}
+      {showAdmin && (
+        <div className="px-4 py-4 sm:px-6 border-b border-border bg-bg-base/80 animate-in fade-in slide-in-from-top-3">
+          <AdminConsole currentUser={currentUser} onClose={() => setShowAdmin(false)} />
+        </div>
+      )}
 
       {/* ── Status strip ── */}
       <div className="px-4 py-3 sm:px-6 border-b border-border">
@@ -286,13 +500,112 @@ export default function Home() {
           </h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <AlertsPanel alerts={stationAlerts} />
-            <WhatIfSimulator onSeverityChange={setSeverity} />
+            <WhatIfSimulator
+              onSeverityChange={setSeverity}
+              onScenarioChange={setScenario}
+              station={stationKey}
+            />
           </div>
           <div className="mt-4">
-            <SimulationChart severity={severity} station={stationKey} />
+            <SimulationChart severity={severity} scenario={scenario} station={stationKey} />
           </div>
         </section>
       </main>
+
+      {/* ── Demo Authentication Modal ── */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-bg-card p-5 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <UserIcon size={16} className="text-[#4CC9F0]" />
+                <h3 className="text-sm font-sans font-medium text-text-primary">
+                  AURORA Security Access
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="text-text-muted hover:text-text-primary"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* One-click demo roles */}
+            <div className="flex flex-col gap-1.5 bg-bg-base/60 p-2.5 rounded-lg border border-border">
+              <span className="text-[11px] font-mono text-text-muted">Quick SIH Demo Credentials:</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => quickDemoLogin("admin")}
+                  className="flex-1 py-1 rounded text-xs font-mono bg-[#FFB84D]/15 text-[#FFB84D] border border-[#FFB84D]/30 hover:bg-[#FFB84D]/25 transition-colors"
+                >
+                  Admin Role
+                </button>
+                <button
+                  type="button"
+                  onClick={() => quickDemoLogin("operator")}
+                  className="flex-1 py-1 rounded text-xs font-mono bg-border/50 text-text-primary hover:bg-border transition-colors"
+                >
+                  Operator Role
+                </button>
+              </div>
+            </div>
+
+            {loginError && (
+              <div className="rounded-lg bg-[#F5484F]/10 border border-[#F5484F]/30 p-2.5 flex items-start gap-2 text-xs text-[#F5484F]">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleLoginSubmit} className="flex flex-col gap-3">
+              <div>
+                <label className="block text-xs font-mono text-text-muted mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-[#4CC9F0]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-text-muted mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-[#4CC9F0]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setShowLoginModal(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-sans text-text-muted hover:text-text-primary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loginLoading}
+                  className="px-4 py-1.5 rounded-lg text-xs font-sans font-medium bg-[#4CC9F0] text-[#0B0F14] hover:bg-[#4CC9F0]/90 transition-colors"
+                >
+                  {loginLoading ? "Authenticating..." : "Sign In"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

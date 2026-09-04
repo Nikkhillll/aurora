@@ -13,6 +13,7 @@ import {
 
 interface WhatIfSimulatorProps {
   onSeverityChange?: (severity: number) => void;
+  onScenarioChange?: (scenario: Scenario) => void;
   station?: StationKey;
 }
 
@@ -24,6 +25,7 @@ const SCENARIOS: { value: Scenario; label: string }[] = [
 
 export default function WhatIfSimulator({
   onSeverityChange,
+  onScenarioChange,
   station = "maitri",
 }: WhatIfSimulatorProps) {
   const [severity, setSeverity] = useState(30);
@@ -35,7 +37,11 @@ export default function WhatIfSimulator({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+
+    // Use microtask to avoid synchronous setState inside render effect
+    Promise.resolve().then(() => {
+      if (!cancelled) setLoading(true);
+    });
 
     runSimulation({
       severity,
@@ -57,6 +63,11 @@ export default function WhatIfSimulator({
   const handleSeverityChange = (value: number) => {
     setSeverity(value);
     onSeverityChange?.(value);
+  };
+
+  const handleScenarioSelect = (selected: Scenario) => {
+    setScenario(selected);
+    onScenarioChange?.(selected);
   };
 
   const projectedHours = result?.projectedHours ?? 0;
@@ -95,8 +106,8 @@ export default function WhatIfSimulator({
         {SCENARIOS.map((s) => (
           <button
             key={s.value}
-            onClick={() => setScenario(s.value)}
-            className="flex-1 rounded-lg px-2 py-1.5 text-xs font-sans transition-colors"
+            onClick={() => handleScenarioSelect(s.value)}
+            className="flex-1 rounded-lg px-2 py-1.5 text-xs font-sans transition-colors cursor-pointer"
             style={{
               backgroundColor: scenario === s.value ? "#4CC9F015" : "transparent",
               border: `1px solid ${scenario === s.value ? "#4CC9F0" : "#212B38"}`,
