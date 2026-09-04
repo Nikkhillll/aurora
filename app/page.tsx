@@ -17,6 +17,16 @@ import { exportSnapshotToCSV, exportSnapshotToPrintableReport } from "@/utils/ex
 import { getStoredUser, setStoredUser, login, clearSession, type User } from "@/lib/authClient";
 import { Download, Printer, Shield, LogIn, LogOut, User as UserIcon, X, AlertCircle } from "lucide-react";
 
+// PERSON 1: live Infrastructure/Logistics snapshot fetch — added on top of
+// Person 6's auth/admin/export work without touching any of it.
+import {
+  fetchSnapshot,
+  mapInfrastructure,
+  mapLogistics,
+  type StationKey,
+  type StationSnapshot,
+} from "@/lib/snapshotClient";
+
 // Recharts' ResponsiveContainer measures the real DOM on mount, which
 // differs slightly from the server's guess and causes a hydration
 // mismatch. Rendering these client-only avoids that entirely.
@@ -211,10 +221,17 @@ export default function Home() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // PERSON 1: live Infrastructure/Logistics snapshot state
+  const [snapshot, setSnapshot] = useState<StationSnapshot | null>(null);
+
   // Initialize auth on client mount to prevent React hydration mismatch (Error #418)
   useEffect(() => {
     const stored = getStoredUser();
     if (stored) {
+      // Intentional: this must run client-side only, after hydration, per
+      // the comment above (avoids React Error #418). Not restructuring
+      // Person 6's auth bootstrap here — flagging for their review instead.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentUser(stored);
     } else {
       const defaultAdmin: User = {
@@ -244,9 +261,41 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  // PERSON 1: fetch live snapshot whenever activeStation changes. The
+  // synchronous "clear stale snapshot" reset lives in the click handler
+  // below (handleStationChange), not here — eslint's
+  // react-hooks/set-state-in-effect rule flags setState called synchronously
+  // in an effect body; setState inside the .then() below is fine since that
+  // runs after the async fetch resolves, not synchronously in the effect.
+  useEffect(() => {
+    let cancelled = false;
+    fetchSnapshot(activeStation as StationKey).then((snap) => {
+      if (!cancelled) setSnapshot(snap);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStation]);
+
+  // PERSON 1: station switch handler — clears the stale snapshot at the
+  // moment of user interaction (event handler), then triggers the effect
+  // above via the activeStation state change. Same UX as before (no stale
+  // reading briefly shown under the wrong station), just lint-clean.
+  const handleStationChange = (id: string) => {
+    setSnapshot(null);
+    setActiveStation(id);
+  };
+
   const station = stations.find((s) => s.id === activeStation) ?? stations[0];
-  const { env, energy, infra, logistics, stationAlerts } =
+  const { env, energy, infra: mockInfra, logistics: mockLogistics, stationAlerts } =
     useStationData(activeStation);
+
+  // PERSON 1: live snapshot when available, mock fallback otherwise.
+  // Everything downstream (cards, export handlers) keeps using the plain
+  // `infra` / `logistics` names, so nothing else in this file needs to change.
+  const infra = snapshot ? mapInfrastructure(snapshot) : mockInfra;
+  const logistics = snapshot ? mapLogistics(snapshot) : mockLogistics;
+
   const statusSegments = deriveStatus(activeStation);
   const stationKey = activeStation === "bharati" ? "bharati" : "maitri";
 
@@ -372,7 +421,7 @@ export default function Home() {
               {stations.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => setActiveStation(s.id)}
+                  onClick={() => handleStationChange(s.id)}
                   className={`font-mono text-base px-2.5 py-1 rounded transition-colors cursor-pointer ${
                     activeStation === s.id
                       ? "text-text-primary bg-border/50"
