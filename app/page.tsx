@@ -203,28 +203,33 @@ export default function Home() {
   const [scenario, setScenario] = useState<"storm" | "equipment_failure" | "resupply_delay">("storm");
 
   // Auth & Admin State
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    if (typeof window === "undefined") return null;
-    const stored = getStoredUser();
-    if (stored) return stored;
-    const defaultAdmin: User = {
-      id: "usr_001",
-      email: "admin@aurora.ncpor.res.in",
-      name: "NCPOR Station Director",
-      role: "admin",
-      is_active: true,
-      created_at: new Date().toISOString(),
-      last_login: new Date().toISOString(),
-    };
-    setStoredUser(defaultAdmin);
-    return defaultAdmin;
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState("admin@aurora.ncpor.res.in");
   const [loginPassword, setLoginPassword] = useState("Admin@Aurora2026!");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // Initialize auth on client mount to prevent React hydration mismatch (Error #418)
+  useEffect(() => {
+    const stored = getStoredUser();
+    if (stored) {
+      setCurrentUser(stored);
+    } else {
+      const defaultAdmin: User = {
+        id: "usr_001",
+        email: "admin@aurora.ncpor.res.in",
+        name: "NCPOR Station Director",
+        role: "admin",
+        is_active: true,
+        created_at: new Date().toISOString(),
+        last_login: new Date().toISOString(),
+      };
+      setStoredUser(defaultAdmin);
+      setCurrentUser(defaultAdmin);
+    }
+  }, []);
 
   // Live UTC clock
   useEffect(() => {
