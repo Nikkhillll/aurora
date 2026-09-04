@@ -25,9 +25,8 @@ app.add_middleware(
 for module in (stations, telemetry, alerts, simulate, ingest, ws):
     app.include_router(module.router)
 
-# Person 6 adds their auth router here and nowhere else:
-# from app.auth import router as auth_router
-# app.include_router(auth_router.router)
+from app.auth import router as auth_router
+app.include_router(auth_router.router)
 
 
 @app.on_event("startup")
