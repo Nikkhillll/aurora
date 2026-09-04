@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+     // Person 1: backend is a separate Python project (FastAPI + .venv) and
+    // should never be walked by the frontend linter.
+    "backend/**",
   ]),
 ]);
 
