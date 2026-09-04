@@ -9,7 +9,12 @@
  * the page.
  */
 
-import type { InfrastructureData, LogisticsData } from "@/data/mockData";
+import type {
+  InfrastructureData,
+  LogisticsData,
+  EnvironmentData,
+  EnergyData,
+} from "@/data/mockData";
 
 export type StationKey = "maitri" | "bharati";
 
@@ -18,6 +23,22 @@ type BackendStatus = "nominal" | "warning" | "critical";
 interface SnapshotZone {
   id: string;
   name: string;
+  status: BackendStatus;
+}
+
+interface SnapshotEnvironment {
+  temperature_c: number;
+  wind_speed_ms: number;
+  pressure_hpa: number;
+  visibility_km?: number;
+  status: BackendStatus;
+}
+
+interface SnapshotEnergy {
+  battery_level_pct: number;
+  generation_kw: number;
+  consumption_kw?: number;
+  projected_hours_remaining?: number;
   status: BackendStatus;
 }
 
@@ -39,10 +60,10 @@ interface SnapshotLogistics {
 export interface StationSnapshot {
   station_id: string;
   timestamp: string;
+  environment: SnapshotEnvironment;
+  energy: SnapshotEnergy;
   infrastructure: SnapshotInfrastructure;
   logistics: SnapshotLogistics;
-  // environment / energy also exist on the real response but aren't mapped
-  // here — those two cards are still on mock data as of this pass.
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
@@ -134,3 +155,54 @@ export function mapLogistics(snap: StationSnapshot): LogisticsData {
     // status field today. Not wired up. See message to Person 2.
   };
 }
+
+// ── Environment and Energy Mappings ──
+
+const STATUS_TO_WEATHER_RISK: Record<BackendStatus, EnvironmentData["weatherRisk"]> = {
+  nominal: "Low",
+  warning: "Moderate",
+  critical: "High",
+};
+
+/**
+ * Maps backend environment telemetry to the EnvironmentData shape for EnvironmentCard.
+ * Backend wind_speed_ms is in m/s; EnvironmentCard expects km/h (conversion: × 3.6).
+ */
+export function mapEnvironment(snap: StationSnapshot): EnvironmentData {
+  const env = snap.environment;
+  return {
+    temperature: env?.temperature_c ?? 0,
+    wind: Math.round((env?.wind_speed_ms ?? 0) * 3.6),
+    pressure: env?.pressure_hpa ?? 1013,
+    weatherRisk: env?.status ? (STATUS_TO_WEATHER_RISK[env.status] ?? "Low") : "Low",
+  };
+}
+
+const STATUS_TO_GENERATOR_STATUS: Record<BackendStatus, EnergyData["generatorStatus"]> = {
+  nominal: "Standby",
+  warning: "Online",
+  critical: "Online",
+};
+
+/**
+ * Compatibility mapping:
+ * The backend currently provides total generation (generation_kw) only and does
+ * not provide a separate solar vs. wind breakdown. Total generation is mapped to
+ * solarGeneration, and windGeneration is set to 0 until the backend exposes a breakdown.
+ *
+ * Generator status is derived from the overall energy status (nominal -> Standby,
+ * warning/critical -> Online). This is an operational status mapping from available
+ * energy telemetry, not direct generator telemetry fields.
+ */
+export function mapEnergy(snap: StationSnapshot): EnergyData {
+  const energy = snap.energy;
+  return {
+    batteryLevel: energy?.battery_level_pct ?? 0,
+    solarGeneration: energy?.generation_kw ?? 0,
+    windGeneration: 0,
+    generatorStatus: energy?.status
+      ? (STATUS_TO_GENERATOR_STATUS[energy.status] ?? "Standby")
+      : "Standby",
+  };
+}
+
