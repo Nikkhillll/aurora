@@ -1,30 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sliders, Battery, Wifi, WifiOff } from "lucide-react";
+import { Sliders, Battery, Wifi, WifiOff, Info } from "lucide-react";
 import { energyData, bharatiEnergyData } from "@/data/mockData";
 import {
   runSimulation,
-  statusColorForHours,
+  statusColorForRisk,
   type StationKey,
+  type Scenario,
   type SimulationResult,
 } from "@/lib/simulationClient";
 
 interface WhatIfSimulatorProps {
-  /**
-   * Optional callback so a parent (e.g. page.tsx) can mirror the slider
-   * value and drive other components, like SimulationChart, from it.
-   * Component still works fully standalone if this isn't passed.
-   */
   onSeverityChange?: (severity: number) => void;
   station?: StationKey;
 }
+
+const SCENARIOS: { value: Scenario; label: string }[] = [
+  { value: "storm", label: "Storm" },
+  { value: "equipment_failure", label: "Equipment failure" },
+  { value: "resupply_delay", label: "Resupply delay" },
+];
 
 export default function WhatIfSimulator({
   onSeverityChange,
   station = "maitri",
 }: WhatIfSimulatorProps) {
   const [severity, setSeverity] = useState(30);
+  const [scenario, setScenario] = useState<Scenario>("storm");
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -36,6 +39,7 @@ export default function WhatIfSimulator({
 
     runSimulation({
       severity,
+      scenario,
       station,
       batteryLevel: stationEnergy.batteryLevel,
     }).then((res) => {
@@ -48,18 +52,19 @@ export default function WhatIfSimulator({
     return () => {
       cancelled = true;
     };
-  }, [severity, station, stationEnergy.batteryLevel]);
+  }, [severity, scenario, station, stationEnergy.batteryLevel]);
 
-  const handleChange = (value: number) => {
+  const handleSeverityChange = (value: number) => {
     setSeverity(value);
     onSeverityChange?.(value);
   };
 
   const projectedHours = result?.projectedHours ?? 0;
-  const color = statusColorForHours(projectedHours);
+  const baselineHours = result?.baselineHours ?? 0;
+  const color = statusColorForRisk(result?.riskLevel ?? "low");
 
   return (
-    <div className="rounded-xl border border-border bg-bg-card p-5 flex flex-col gap-5">
+    <div className="rounded-lg border border-border bg-bg-card p-5 flex flex-col gap-5">
       {/* Card header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -69,10 +74,6 @@ export default function WhatIfSimulator({
           </h2>
         </div>
 
-        {/* Live/fallback indicator — shows whether this is hitting the
-            real backend yet, or still running on local math. Useful for
-            the team to see at a glance during integration, harmless to
-            leave visible in the final demo too. */}
         {result && (
           <span
             className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-wide"
@@ -89,18 +90,31 @@ export default function WhatIfSimulator({
         )}
       </div>
 
-      {/* Scenario label */}
+      {/* Scenario selector */}
+      <div className="flex gap-2">
+        {SCENARIOS.map((s) => (
+          <button
+            key={s.value}
+            onClick={() => setScenario(s.value)}
+            className="flex-1 rounded-lg px-2 py-1.5 text-xs font-sans transition-colors"
+            style={{
+              backgroundColor: scenario === s.value ? "#4CC9F015" : "transparent",
+              border: `1px solid ${scenario === s.value ? "#4CC9F0" : "#212B38"}`,
+              color: scenario === s.value ? "#4CC9F0" : "#8592A3",
+            }}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Severity slider */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <label
-            htmlFor="storm-severity"
-            className="text-sm text-text-muted font-sans"
-          >
-            Simulate storm severity
+          <label htmlFor="storm-severity" className="text-sm text-text-muted font-sans">
+            Severity
           </label>
-          <span className="text-sm font-mono text-text-primary">
-            {severity}%
-          </span>
+          <span className="text-sm font-mono text-text-primary">{severity}%</span>
         </div>
 
         <input
@@ -110,7 +124,7 @@ export default function WhatIfSimulator({
           max={100}
           step={1}
           value={severity}
-          onChange={(e) => handleChange(Number(e.target.value))}
+          onChange={(e) => handleSeverityChange(Number(e.target.value))}
           className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-border accent-[#4CC9F0]"
         />
 
@@ -137,10 +151,25 @@ export default function WhatIfSimulator({
           </span>
           <p className="text-lg font-mono font-medium" style={{ color }}>
             {projectedHours}
-            <span className="text-sm text-text-muted ml-1">hrs remaining</span>
+            <span className="text-sm text-text-muted ml-1">
+              hrs remaining
+              {baselineHours > 0 && (
+                <span className="text-text-muted"> (baseline {baselineHours}h)</span>
+              )}
+            </span>
           </p>
         </div>
       </div>
+
+      {/* Narrative — plain-language explanation from the backend */}
+      {result?.narrative && (
+        <div className="flex items-start gap-2 rounded-lg bg-bg-base/50 p-3">
+          <Info size={14} className="text-text-muted mt-0.5 shrink-0" />
+          <p className="text-xs text-text-muted font-sans leading-relaxed">
+            {result.narrative}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
