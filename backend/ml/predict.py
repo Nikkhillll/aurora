@@ -294,13 +294,14 @@ def predict_battery_hours(
     state: dict,
 ) -> float:
     """
-    Predict remaining battery endurance.
+    Predict remaining battery endurance from the supplied station state.
 
-    The storm risk is first predicted from environmental
-    conditions.
+    The function predicts the endurance of the state exactly as provided.
+    It does not modify generation or consumption internally.
 
-    The predicted storm then modifies generation and
-    consumption before being passed to the energy model.
+    This is important for cascading simulations: the simulation engine may
+    already have applied storm, equipment-failure, or other scenario impacts.
+    Applying those impacts again here would double-count them.
 
     Parameters
     ----------
@@ -329,21 +330,29 @@ def predict_battery_hours(
     """
 
     if "environment" not in state:
-        raise ValueError(
-            "Missing 'environment' state"
-        )
+        raise ValueError("Missing 'environment' state")
 
     if "energy" not in state:
-        raise ValueError(
-            "Missing 'energy' state"
-        )
+        raise ValueError("Missing 'energy' state")
 
     environment = state["environment"]
     energy = state["energy"]
 
-    # -----------------------------------------------------
-    # Validate required energy fields
-    # -----------------------------------------------------
+    required_environment = [
+        "temperature_c",
+        "wind_speed_ms",
+    ]
+
+    missing_environment = [
+        field
+        for field in required_environment
+        if field not in environment
+    ]
+
+    if missing_environment:
+        raise ValueError(
+            f"Missing environment inputs: {missing_environment}"
+        )
 
     required_energy = [
         "battery_level_pct",
@@ -351,17 +360,36 @@ def predict_battery_hours(
         "consumption_kw",
     ]
 
-    missing = [
+    missing_energy = [
         field
         for field in required_energy
         if field not in energy
     ]
 
-    if missing:
+    if missing_energy:
         raise ValueError(
-            f"Missing energy inputs: {missing}"
+            f"Missing energy inputs: {missing_energy}"
         )
 
+    model = _load_energy_model()
+
+    model_input = pd.DataFrame(
+        [[
+            float(energy["battery_level_pct"]),
+            float(energy["generation_kw"]),
+            float(energy["consumption_kw"]),
+            float(environment["temperature_c"]),
+            float(environment["wind_speed_ms"]),
+        ]],
+        columns=ENERGY_FEATURES,
+    )
+
+    predicted_hours = float(model.predict(model_input)[0])
+
+    # Keep the forecast within the range used by AURORA.
+    predicted_hours = max(0.5, min(72.0, predicted_hours))
+
+    return round(predicted_hours, 2)
     # -----------------------------------------------------
     # Predict storm
     # -----------------------------------------------------
