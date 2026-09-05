@@ -124,7 +124,7 @@ export async function generateAlerts(
     const response = await fetch(url, {
       method: "GET",
       cache: "no-store",
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(6000),
     });
 
     if (!response.ok) {

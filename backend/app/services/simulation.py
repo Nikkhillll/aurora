@@ -1,7 +1,7 @@
 """What-if engine. Person 5's slider calls this via POST /simulate."""
 import copy
 
-from app.services import ml_bridge, state
+from app.services import ml_bridge, state, alerts
 
 _NARRATIVE = {
     "storm": ("At {sev}% storm severity, wind generation drops roughly {gen_drop}% "
@@ -58,6 +58,7 @@ def run(station_id: str, scenario: str, severity: int) -> dict:
 
     base_hours = ml_bridge.battery_hours(base_snap)
     proj_hours = ml_bridge.battery_hours(proj_snap)
+    alerts.evaluate(station_id, snap=proj_snap)
 
     narrative = _NARRATIVE[scenario].format(
         sev=severity,

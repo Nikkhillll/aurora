@@ -35,28 +35,36 @@ export default function WhatIfSimulator({
 
   const stationEnergy = station === "bharati" ? bharatiEnergyData : energyData;
 
+  // Debounced: dragging the slider fires this effect on every tick. Without
+  // debouncing, each tick sends its own /simulate request, which can pile up
+  // faster than the (local, model-heavy) backend can answer and cause
+  // timeouts that look like the backend is offline when it isn't. Waiting
+  // briefly after the user stops moving the slider sends one request per
+  // "settled" value instead of one per pixel of drag.
   useEffect(() => {
     let cancelled = false;
 
-    // Use microtask to avoid synchronous setState inside render effect
     Promise.resolve().then(() => {
       if (!cancelled) setLoading(true);
     });
 
-    runSimulation({
-      severity,
-      scenario,
-      station,
-      batteryLevel: stationEnergy.batteryLevel,
-    }).then((res) => {
-      if (!cancelled) {
-        setResult(res);
-        setLoading(false);
-      }
-    });
+    const debounceTimer = setTimeout(() => {
+      runSimulation({
+        severity,
+        scenario,
+        station,
+        batteryLevel: stationEnergy.batteryLevel,
+      }).then((res) => {
+        if (!cancelled) {
+          setResult(res);
+          setLoading(false);
+        }
+      });
+    }, 250);
 
     return () => {
       cancelled = true;
+      clearTimeout(debounceTimer);
     };
   }, [severity, scenario, station, stationEnergy.batteryLevel]);
 

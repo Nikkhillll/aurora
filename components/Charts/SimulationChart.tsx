@@ -38,25 +38,32 @@ export default function SimulationChart({
   const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("low");
   const [isLive, setIsLive] = useState(false);
 
+  // Debounced for the same reason as WhatIfSimulator: this effect and
+  // WhatIfSimulator's both fire on every severity tick while dragging, so
+  // without debouncing, one slider drag could fire two /simulate requests
+  // per tick — doubling the load that was causing timeouts.
   useEffect(() => {
     let cancelled = false;
 
-    runSimulation({
-      severity,
-      scenario,
-      station,
-      batteryLevel: stationEnergy.batteryLevel,
-    }).then((res) => {
-      if (!cancelled) {
-        setProjectedHours(res.projectedHours);
-        setTimeline(res.timeline);
-        setRiskLevel(res.riskLevel);
-        setIsLive(res.isLive);
-      }
-    });
+    const debounceTimer = setTimeout(() => {
+      runSimulation({
+        severity,
+        scenario,
+        station,
+        batteryLevel: stationEnergy.batteryLevel,
+      }).then((res) => {
+        if (!cancelled) {
+          setProjectedHours(res.projectedHours);
+          setTimeline(res.timeline);
+          setRiskLevel(res.riskLevel);
+          setIsLive(res.isLive);
+        }
+      });
+    }, 250);
 
     return () => {
       cancelled = true;
+      clearTimeout(debounceTimer);
     };
   }, [severity, scenario, station, stationEnergy.batteryLevel]);
 
