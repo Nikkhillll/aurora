@@ -114,7 +114,7 @@ export async function runSimulation(
         scenario: input.scenario ?? "storm",
         severity: input.severity,
       }),
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(6000),
     });
 
     if (!res.ok) throw new Error(`Simulation API returned ${res.status}`);

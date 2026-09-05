@@ -19,6 +19,11 @@ const severityConfig = {
     icon: AlertTriangle,
     label: "High",
   },
+  warning: {
+    color: "#F5A524",
+    icon: AlertCircle,
+    label: "Warning",
+  },
   medium: {
     color: "#F5A524",
     icon: AlertCircle,
@@ -31,13 +36,24 @@ const severityConfig = {
   },
 } as const;
 
+// Backend (alerts.py) can send severities not covered above in the
+// future — this guarantees we always fall back to something renderable
+// instead of crashing on an unexpected string.
+const DEFAULT_CONFIG = severityConfig.medium;
+
+function getSeverityConfig(severity: string) {
+  return (
+    severityConfig[severity as keyof typeof severityConfig] ?? DEFAULT_CONFIG
+  );
+}
+
 interface AlertsPanelProps {
   alerts: Alert[];
 }
 
 export default function AlertsPanel({ alerts }: AlertsPanelProps) {
   return (
-    <div className="rounded-[12px] border border-border bg-bg-card p-5 flex flex-col gap-4">
+    <div className="rounded-xl border border-border bg-bg-card p-5 flex flex-col gap-4">
       {/* Card header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -58,13 +74,13 @@ export default function AlertsPanel({ alerts }: AlertsPanelProps) {
           </p>
         ) : (
           alerts.map((alert) => {
-            const config = severityConfig[alert.severity];
+            const config = getSeverityConfig(alert.severity);
             const Icon = config.icon;
 
             return (
               <div
                 key={alert.id}
-                className="flex items-start gap-3 rounded-[8px] p-3"
+                className="flex items-start gap-3 rounded-lg p-3"
                 style={{
                   backgroundColor: `${config.color}0F`,
                   border: `1px solid ${config.color}30`,

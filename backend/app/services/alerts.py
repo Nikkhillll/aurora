@@ -25,9 +25,10 @@ def _add(station_id: str, severity: str, title: str, message: str) -> dict | Non
     return alert
 
 
-def evaluate(station_id: str) -> list[dict]:
-    """Run after every ingest. Returns only newly raised alerts, for broadcasting."""
-    snap = state.snapshot(station_id)
+def evaluate(station_id: str, snap: dict | None = None) -> list[dict]:
+    """Run after every ingest, or with a hypothetical snapshot from simulation."""
+    if snap is None:
+        snap = state.snapshot(station_id)
     new = []
     hours = ml_bridge.battery_hours(snap)
     risk = ml_bridge.storm_risk(snap)
