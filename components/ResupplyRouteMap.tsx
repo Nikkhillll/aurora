@@ -62,10 +62,12 @@ export default function ResupplyRouteMap({
   const route = RESUPPLY_ROUTES[station];
 
   // Fetch route risk from Aurora backend
+  const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   useEffect(() => {
     let cancelled = false;
 
-    fetch(`http://127.0.0.1:8000/api/logistics/ice-risk?station=${station}`)
+    fetch(`${API_BASE_URL}/api/logistics/ice-risk?station=${station}`)
       .then((response) => {
         if (!response.ok) {
           throw new Error(`Ice risk API returned ${response.status}`);
