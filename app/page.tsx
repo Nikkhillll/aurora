@@ -18,6 +18,8 @@ import { getStoredUser, setStoredUser, login, clearSession, type User } from "@/
 import { generateAlerts } from "@/lib/alertsClient";
 import { Download, Printer, Shield, LogIn, LogOut, User as UserIcon, X, AlertCircle } from "lucide-react";
 
+import ResupplyRouteMap from "@/components/ResupplyRouteMap";
+
 // PERSON 1: live Infrastructure/Logistics snapshot fetch — added on top of
 // Person 6's auth/admin/export work without touching any of it.
 import {
@@ -213,7 +215,7 @@ function deriveStatus(stationId: string): StatusSegment[] {
 
 // ── Main dashboard page ──
 export default function Home() {
-  const [activeStation, setActiveStation] = useState("maitri");
+  const [activeStation, setActiveStation] = useState<"maitri" | "bharati">("maitri");
   const [utcTime, setUtcTime] = useState("");
   const [severity, setSeverity] = useState(30);
   const [scenario, setScenario] = useState<"storm" | "equipment_failure" | "resupply_delay">("storm");
@@ -324,7 +326,7 @@ export default function Home() {
   // moment of user interaction (event handler), then triggers the effect
   // above via the activeStation state change. Same UX as before (no stale
   // reading briefly shown under the wrong station), just lint-clean.
-  const handleStationChange = (id: string) => {
+  const handleStationChange = (id: "maitri" | "bharati") => {
     setSnapshot(null);
     setActiveStation(id);
   };
@@ -555,7 +557,7 @@ export default function Home() {
               {stations.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => handleStationChange(s.id)}
+                  onClick={() => handleStationChange(s.id as "maitri" | "bharati")}
                   className={`font-mono text-base px-2.5 py-1 rounded transition-colors cursor-pointer ${
                     activeStation === s.id
                       ? "text-text-primary bg-border/50"
@@ -669,6 +671,18 @@ export default function Home() {
           <InfrastructureCard data={infra} />
           <LogisticsCard data={logistics} />
         </div>
+
+      {/* ── Resupply Route Visualizer ── */}
+      <section className="mt-6">
+      <h3 className="text-sm text-text-muted font-sans uppercase tracking-widest mb-3">
+        Resupply Route
+      </h3>
+
+      <ResupplyRouteMap
+        station={activeStation}
+        nextResupplyDate="2026-11-15"
+      />
+      </section>
 
         {/* ── Trend / history section ── */}
         <section className="mt-6">

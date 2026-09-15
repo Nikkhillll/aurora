@@ -4,25 +4,30 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import ALLOWED_ORIGIN_REGEX, ALLOWED_ORIGINS, REQUIRE_AUTH, VERSION
-from app.routers import alerts, ingest, simulate, stations, telemetry, ws
+from app.routers import alerts, ingest, logistics, simulate, stations, telemetry, ws
 from app.services import ml_bridge, state, ws_manager
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 
-app = FastAPI(title="AURORA API", version=VERSION,
-              description="Antarctic Unified Operations & Risk Analytics")
+app = FastAPI(
+    title="AURORA API",
+    version=VERSION,
+    description="Antarctic Unified Operations & Risk Analytics"
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=ALLOWED_ORIGIN_REGEX,  # covers Vercel preview deploys
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-for module in (stations, telemetry, alerts, simulate, ingest, ws):
+for module in (stations, telemetry, alerts, simulate, ingest, logistics, ws):
     app.include_router(module.router)
 
 from app.auth import router as auth_router
