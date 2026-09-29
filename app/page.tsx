@@ -10,6 +10,7 @@ import InfrastructureCard from "@/components/InfrastructureCard";
 import LogisticsCard from "@/components/LogisticsCard";
 import AlertsPanel from "@/components/AlertsPanel";
 import WhatIfSimulator from "@/components/WhatIfSimulator";
+import PersonnelSafetyCard from "@/components/PersonnelSafetyCard";
 
 import Notifications from "@/components/Notifications";
 import AdminConsole from "@/components/AdminConsole";
@@ -17,6 +18,7 @@ import { exportSnapshotToCSV, exportSnapshotToPrintableReport } from "@/utils/ex
 import { getStoredUser, setStoredUser, login, clearSession, type User } from "@/lib/authClient";
 import { generateAlerts } from "@/lib/alertsClient";
 import { Download, Printer, Shield, LogIn, LogOut, User as UserIcon, X, AlertCircle } from "lucide-react";
+import { fetchPersonnelSafety } from "@/lib/personnelClient";
 
 import ResupplyRouteMap from "@/components/ResupplyRouteMap";
 
@@ -64,6 +66,7 @@ import {
   type EnergyData,
   type Alert,
 } from "@/data/mockData";
+import { personnelSafetyData } from "@/data/personnelSafety";
 
 // ── Contour line SVG pattern (topographic background) ──
 function ContourPattern() {
@@ -232,6 +235,8 @@ export default function Home() {
   // Live backend snapshot + alert state
   const [snapshot, setSnapshot] = useState<StationSnapshot | null>(null);
   const [liveAlerts, setLiveAlerts] = useState<Alert[]>([]);
+  const [personnelSafety, setPersonnelSafety] =
+    useState(personnelSafetyData);
 
   // Initialize auth on client mount to prevent React hydration mismatch (Error #418)
   useEffect(() => {
@@ -278,8 +283,10 @@ export default function Home() {
 
     const loadLiveData = async () => {
       const snap = await fetchStationSnapshot(activeStation as StationKey);
+      const personnel = await fetchPersonnelSafety();
 
       if (cancelled) return;
+      setPersonnelSafety(personnel);
 
       setSnapshot(snap);
 
@@ -670,6 +677,13 @@ export default function Home() {
           <EnergyCard data={energy} />
           <InfrastructureCard data={infra} />
           <LogisticsCard data={logistics} />
+          <PersonnelSafetyCard
+          data={{
+                ...personnelSafety,
+                temperatureC: env.temperature,
+                windSpeedKmh: env.wind,
+              }}
+          />
         </div>
 
       {/* ── Resupply Route Visualizer ── */}

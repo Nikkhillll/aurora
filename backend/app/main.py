@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import ALLOWED_ORIGIN_REGEX, ALLOWED_ORIGINS, REQUIRE_AUTH, VERSION
-from app.routers import alerts, ingest, logistics, simulate, stations, telemetry, ws
+from app.routers import alerts, ingest, logistics, personnel, simulate, stations, telemetry, ws
 from app.services import ml_bridge, state, ws_manager
 
 logging.basicConfig(
@@ -27,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (stations, telemetry, alerts, simulate, ingest, logistics, ws):
+for module in (stations, telemetry, alerts, simulate, ingest, logistics, personnel, ws):
     app.include_router(module.router)
 
 from app.auth import router as auth_router
