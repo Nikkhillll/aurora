@@ -80,7 +80,7 @@ export default function ResupplyRouteMap({
         }
       })
       .catch((error) => {
-        console.error("Resupply ice-risk API failed:", error);
+        console.warn("Resupply ice-risk API failed:", error);
       });
 
     return () => {

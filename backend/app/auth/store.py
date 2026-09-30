@@ -14,6 +14,9 @@ from app.auth.config import (
     DEMO_ADMIN_EMAIL,
     DEMO_ADMIN_NAME,
     DEMO_ADMIN_PASSWORD,
+    DEMO_BHARATI_EMAIL,
+    DEMO_BHARATI_NAME,
+    DEMO_BHARATI_PASSWORD,
     DEMO_OPERATOR_EMAIL,
     DEMO_OPERATOR_NAME,
     DEMO_OPERATOR_PASSWORD,
@@ -69,6 +72,19 @@ def seed() -> None:
             "last_login": None,
         }
         _USERS_BY_EMAIL[DEMO_OPERATOR_EMAIL.lower()] = op_id
+                # Seed Bharati Operator
+        bh_id = f"usr_{next(_user_id_counter):03d}"
+        _USERS[bh_id] = {
+            "id": bh_id,
+            "email": DEMO_BHARATI_EMAIL.lower(),
+            "name": DEMO_BHARATI_NAME,
+            "password_hash": hash_password(DEMO_BHARATI_PASSWORD),
+            "role": "operator",
+            "is_active": True,
+            "created_at": _now_iso(),
+            "last_login": None,
+        }
+        _USERS_BY_EMAIL[DEMO_BHARATI_EMAIL.lower()] = bh_id
 
         # Initial seed audit entry
         _AUDIT_LOGS.append({

@@ -25,6 +25,9 @@ DEMO_ADMIN_PASSWORD = os.getenv("AURORA_ADMIN_PASSWORD", "Admin@Aurora2026!")
 DEMO_OPERATOR_EMAIL = os.getenv("AURORA_OPERATOR_EMAIL", "operator@aurora.ncpor.res.in")
 DEMO_OPERATOR_NAME = os.getenv("AURORA_OPERATOR_NAME", "Maitri Lead Operator")
 DEMO_OPERATOR_PASSWORD = os.getenv("AURORA_OPERATOR_PASSWORD", "Operator@Aurora2026!")
+DEMO_BHARATI_EMAIL = os.getenv("AURORA_BHARATI_EMAIL", "scientist@aurora.ncpor.res.in")
+DEMO_BHARATI_NAME = os.getenv("AURORA_BHARATI_NAME", "Bharati Lead Operator")
+DEMO_BHARATI_PASSWORD = os.getenv("AURORA_BHARATI_PASSWORD", "Bharati@Aurora2026!")
 
 if "aurora-dev-secret" in JWT_SECRET_KEY:
     log.warning(

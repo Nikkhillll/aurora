@@ -1,0 +1,61 @@
+/* Station twin: interaction + weather animation */
+
+.twin-zone {
+  cursor: pointer;
+  outline: none;
+}
+.twin-zone .twin-shape {
+  transition: fill 0.15s ease, stroke-width 0.15s ease;
+}
+.twin-zone:hover .twin-shape {
+  stroke-width: 3;
+}
+.twin-zone:focus-visible .twin-shape {
+  stroke-width: 4;
+  stroke-dasharray: 6 4;
+}
+
+.twin-streak {
+  animation: twin-blow linear infinite;
+  opacity: 0;
+}
+@keyframes twin-blow {
+  0% {
+    transform: translate(-40px, -16px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(80px, 32px);
+    opacity: 0;
+  }
+}
+
+.twin-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: twin-pulse 1.8s ease-out infinite;
+}
+@keyframes twin-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .twin-streak {
+    animation: none;
+    opacity: 0.35;
+  }
+  .twin-pulse {
+    animation: none;
+    opacity: 0;
+  }
+}

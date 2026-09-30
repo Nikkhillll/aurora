@@ -7,7 +7,7 @@ interface DialGaugeProps {
   unit: string;
   label: string;
   color: string;
-  size?: number;
+  size?: number; // maximum width in px; the gauge shrinks to fit narrow cards
 }
 
 export default function DialGauge({
@@ -65,13 +65,17 @@ export default function DialGauge({
   // Tick marks at 0%, 25%, 50%, 75%, 100%
   const ticks = [0, 0.25, 0.5, 0.75, 1];
 
+  // Live values can have many decimals; show at most one.
+  const shown = Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
+
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex min-w-0 flex-1 flex-col items-center">
       <svg
-        width={size}
-        height={size * 0.78}
         viewBox={`0 0 ${size} ${size * 0.88}`}
-        className="overflow-visible"
+        className="h-auto w-full overflow-visible"
+        style={{ maxWidth: size }}
+        role="img"
+        aria-label={`${label}: ${shown}${unit}, range ${min} to ${max}`}
       >
         {/* Track arc (background) */}
         <path
@@ -100,7 +104,7 @@ export default function DialGauge({
           const outer = pointOnArc(angle);
           const innerRadius = radius - 12;
           const inner = {
-             x: round(cx + innerRadius * Math.cos(toRad(angle))),
+            x: round(cx + innerRadius * Math.cos(toRad(angle))),
             y: round(cy + innerRadius * Math.sin(toRad(angle))),
           };
           return (
@@ -165,13 +169,13 @@ export default function DialGauge({
           textAnchor="middle"
           fontWeight="600"
         >
-          {value}
+          {shown}
           <tspan fill="#8592A3" fontSize={14}>
             {unit}
           </tspan>
         </text>
       </svg>
-      <span className="text-text-muted text-sm font-sans mt-1">{label}</span>
+      <span className="mt-1 font-sans text-sm text-text-muted">{label}</span>
     </div>
   );
 }
