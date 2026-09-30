@@ -12,6 +12,9 @@ import {
 } from "recharts";
 import { Thermometer } from "lucide-react";
 import { timeSeriesData, bharatiTimeSeriesData, stations } from "@/data/mockData";
+import ChartFrame from "./ChartFrame";
+
+const ACCENT = "#4CC9F0";
 
 export interface TemperaturePoint {
   time: string;
@@ -147,133 +150,73 @@ export default function TempTrendChart({
   const effectiveLoading = externalLoading || isLoading;
   const effectiveError = externalError || apiError;
 
+  const frame = { icon: Thermometer, title, accent: ACCENT, stationName };
+
   if (effectiveLoading) {
     return (
-      <div className="rounded-[12px] border border-border bg-bg-card p-5 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Thermometer size={18} className="text-text-muted" />
-            <h3 className="text-base text-text-muted font-sans">{title}</h3>
-          </div>
-          <span className="text-sm font-mono text-text-muted">{stationName}</span>
-        </div>
-        <div className="h-56 w-full flex items-center justify-center">
-          <span className="text-sm font-mono text-text-muted animate-pulse">
-            Loading temperature trend...
-          </span>
-        </div>
-      </div>
+      <ChartFrame {...frame}>
+        <p className="animate-pulse font-mono text-sm text-text-muted">Loading temperature trend...</p>
+      </ChartFrame>
     );
   }
 
   if (effectiveError && (!liveData || liveData.length === 0)) {
     return (
-      <div className="rounded-[12px] border border-border bg-bg-card p-5 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Thermometer size={18} className="text-text-muted" />
-            <h3 className="text-base text-text-muted font-sans">{title}</h3>
-          </div>
-          <span className="text-sm font-mono text-text-muted">{stationName}</span>
-        </div>
-        <div className="h-56 w-full flex items-center justify-center">
-          <span className="text-sm font-mono text-status-critical">{effectiveError}</span>
-        </div>
-      </div>
+      <ChartFrame {...frame}>
+        <p role="alert" className="font-mono text-sm text-status-critical">
+          {effectiveError}
+        </p>
+      </ChartFrame>
     );
   }
 
   if (!liveData || liveData.length === 0) {
     return (
-      <div className="rounded-[12px] border border-border bg-bg-card p-5 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Thermometer size={18} className="text-text-muted" />
-            <h3 className="text-base text-text-muted font-sans">{title}</h3>
-          </div>
-          <span className="text-sm font-mono text-text-muted">{stationName}</span>
-        </div>
-        <div className="h-56 w-full flex items-center justify-center">
-          <span className="text-sm font-mono text-text-muted">
-            No temperature data recorded
-          </span>
-        </div>
-      </div>
+      <ChartFrame {...frame}>
+        <p className="font-mono text-sm text-text-muted">No temperature data recorded</p>
+      </ChartFrame>
     );
   }
 
   return (
-    <div className="rounded-[12px] border border-border bg-bg-card p-5 flex flex-col gap-4">
-      {/* Chart header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Thermometer size={18} className="text-text-muted" />
-          <h3 className="text-base text-text-muted font-sans">{title}</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          {isLive && (
-            <span className="text-status-nominal text-xs font-mono">
-              ● live
-            </span>
-          )}
-          <span className="text-sm font-mono text-text-primary">
-            {stationName}
-          </span>
-        </div>
-      </div>
-
-      {/* Chart body */}
-      <div className="h-56 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={liveData}
-            margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="#1e293b"
-              vertical={false}
-            />
-            <XAxis
-              dataKey="time"
-              tick={{ fontSize: 11, fill: "#64748b" }}
-              tickLine={false}
-              axisLine={{ stroke: "#334155" }}
-            />
-            <YAxis
-              tick={{ fontSize: 11, fill: "#64748b" }}
-              tickLine={false}
-              axisLine={false}
-              width={36}
-              unit="°C"
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#0f172a",
-                border: "1px solid #334155",
-                borderRadius: 8,
-                fontSize: 12,
-              }}
-              labelStyle={{ color: "#94a3b8" }}
-              formatter={(value) => [`${value}°C`, "Temperature"]}
-              cursor={{ stroke: "#334155", strokeWidth: 1 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="temperature"
-              stroke="#4CC9F0"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{
-                r: 4,
-                fill: "#4CC9F0",
-                stroke: "#0f172a",
-                strokeWidth: 2,
-              }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
+    <ChartFrame {...frame} live={isLive}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={liveData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+          <XAxis
+            dataKey="time"
+            tick={{ fontSize: 11, fill: "#64748b" }}
+            tickLine={false}
+            axisLine={{ stroke: "#334155" }}
+          />
+          <YAxis
+            tick={{ fontSize: 11, fill: "#64748b" }}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+            tickFormatter={(v: number) => `${Math.round(v)}°C`}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "#0f172a",
+              border: "1px solid #334155",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+            labelStyle={{ color: "#94a3b8" }}
+            formatter={(value) => [`${value}°C`, "Temperature"]}
+            cursor={{ stroke: "#334155", strokeWidth: 1 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="temperature"
+            stroke={ACCENT}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4, fill: ACCENT, stroke: "#0f172a", strokeWidth: 2 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartFrame>
   );
 }
